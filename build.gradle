@@ -8,36 +8,11 @@ repositories {
 }
 
 dependencies {
-    // 使用 compileOnly，运行时由游戏提供，不打包进Jar
     compileOnly "com.github.Anuken:Arc:1.139.1"
-    compileOnly "com.github.Anuken:Mindustry:v159.7"
+    compileOnly "com.github.Anuken:Mindustry:v146"
 }
 
 jar {
-    manifest {
-        attributes 'Implementation-Title': 'RedTeamAI'
-    }
+    archiveName = "RedTeamAI.jar"
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-}
-
-java {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
-}
-
-// 官方模板的 deploy 任务（调用 d8 打包跨平台 Jar）
-tasks.register('deploy') {
-    dependsOn 'jar'
-    doLast {
-        def dependencies = (configurations.compileClasspath.asList() + configurations.runtimeClasspath.asList()).collect {
-            "--classpath $it.path"
-        }.join(" ")
-        
-        def d8 = System.getProperty('os.name').toLowerCase().contains('windows') ? "d8.bat" : "d8"
-        def jarFile = jar.archiveFile.get().asFile
-        def outputJar = file("build/libs/${project.name}.jar")
-        
-        // 调用 d8 进行 dex 转换
-        "$d8 $dependencies --min-api 14 --output $outputJar $jarFile".execute(null, new File("build/libs")).waitForProcessOutput(System.out, System.err)
-    }
 }
