@@ -2,14 +2,27 @@ package redteamai;
 
 import arc.math.geom.Vec2;
 import mindustry.ai.types.GroundAI;
-import mindustry.entities.Units;
+import mindustry.gen.Groups;
 import mindustry.gen.Unit;
+import mindustry.gen.Building;
 
 public class EnhancedGroundAI extends GroundAI {
 
     @Override
     public void updateMovement() {
-        if (target == null || target.dead()) {
+        // 检查目标是否有效（Teamc 没有 dead() 方法，需要按实际类型判断）
+        if (target == null) {
+            super.updateMovement();
+            return;
+        }
+        
+        boolean targetAlive = false;
+        if (target instanceof Unit) {
+            targetAlive = !((Unit) target).dead();
+        } else if (target instanceof Building) {
+            targetAlive = !((Building) target).dead();
+        }
+        if (!targetAlive) {
             super.updateMovement();
             return;
         }
@@ -20,10 +33,18 @@ public class EnhancedGroundAI extends GroundAI {
         float desired = range * 0.95f;
         float dist = unit.dst(target);
 
-        // 统计目标附近 180 范围内的敌方炮塔数量
-        int turretCount = Units.getEnemyUnits(unit.team, tx, ty, 180f,
-            e -> e.buildOn() != null && e.buildOn().block.hasTurret
-        ).size;
+        // 手动统计目标附近 180 范围内的敌方炮塔数量
+        int turretCount = 0;
+        for (var u : Groups.unit) {
+            if (u == null || u.dead || u.team == unit.team) continue;
+            if (u.buildOn() != null && u.buildOn().block.hasTurret) {
+                float dx = u.x - tx;
+                float dy = u.y - ty;
+                if (dx * dx + dy * dy <= 180f * 180f) {
+                    turretCount++;
+                }
+            }
+        }
 
         if (turretCount >= 3) {
             // 绕道：垂直偏移 60 像素
