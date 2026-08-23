@@ -7,6 +7,10 @@ repositories {
     maven { url "https://www.jitpack.io" }
 }
 
+ext {
+    mindustryVersion = "v7.0.146"
+}
+
 dependencies {
     compileOnly "com.github.Anuken:Arc:1.139.1"
     compileOnly "com.github.Anuken:Mindustry:v146"
