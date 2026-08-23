@@ -2,45 +2,45 @@ package redteamai;
 
 import arc.math.geom.Vec2;
 import mindustry.ai.types.GroundAI;
-import mindustry.gen.Groups;
-import mindustry.gen.Unit;
 import mindustry.gen.Building;
+import mindustry.gen.Unit;
 import mindustry.world.blocks.defense.turrets.Turret;
 
 public class EnhancedGroundAI extends GroundAI {
 
     @Override
-    public void updateMovement() {
-        // 目标无效 → 走默认逻辑（父类会自己选目标）
+    public void updateUnit() {
+        // 如果没有目标，走原版逻辑（原版会自动找目标）
         if (target == null) {
-            super.updateMovement();
+            super.updateUnit();
             return;
         }
 
-        // 目标有效性
+        // 目标有效性检查
         boolean targetAlive = false;
         if (target instanceof Unit) {
             targetAlive = !((Unit) target).dead();
         } else if (target instanceof Building) {
             targetAlive = !((Building) target).dead();
         }
+        
         if (!targetAlive) {
-            super.updateMovement();
+            super.updateUnit();
             return;
         }
 
+        // --- 以下是自定义移动逻辑 ---
         float tx = target.x();
         float ty = target.y();
         float range = unit.range();
-        float desired = range * 0.9f;  // 稍微走近一点，确保在射程内
+        float desired = range * 0.9f;  // 卡射程留余量
         float dist = unit.dst(target);
 
-        // 统计目标附近炮塔密度
+        // 统计目标附近炮塔密度（绕道判定）
         int turretCount = 0;
-        for (Unit u : Groups.unit) {
-            if (u == null || u.dead || u.team == unit.team) continue;
-            Building b = u.buildOn();
-            if (b != null && b.block instanceof Turret) {
+        for (Unit u : mindustry.Vars.state.teams.enemiesOf(unit.team)) {
+            if (u == null || u.dead || u.buildOn() == null) continue;
+            if (u.buildOn().block instanceof Turret) {
                 float dx = u.x - tx;
                 float dy = u.y - ty;
                 if (dx * dx + dy * dy <= 180f * 180f) {
@@ -60,18 +60,19 @@ public class EnhancedGroundAI extends GroundAI {
                 moveTo(new Vec2(tx + perpX, ty + perpY), 0);
             }
         } else {
-            // 卡射程：距离大于期望就前进，否则站定
-            // 注意：站定时不要强行设置 unit.rotation！让 faceTarget() 自己处理
+            // 卡射程逻辑
             if (dist > desired + 10f) {
-                moveTo(new Vec2(tx, ty), 0);
+                moveTo(new Vec2(tx, ty), 0); // 走近
             } else {
-                // 到站了，停住不动，让父类 faceTarget() 自己把单位转向目标
-                unit.moveAt(Vec2.ZERO);
+                unit.moveAt(Vec2.ZERO); // 站定开火
             }
         }
-    }
 
-    // 关键：不重写 shouldShoot()！
-    // 父类的 shouldShoot() 会调用武器的 shootCone 判定，
-    // 武器炮管转到射界内才会开火，自动保证精度。
+        // --- 关键：不碰转向和开火，让原版机制自己处理 ---
+        // 调用原版的 updateTargeting() 和 updateWeapons()
+        // 原版 updateWeapons() 内部会用 shouldShoot() 判定，保证炮管转到位才开火
+        updateTargeting();
+        updateWeapons();
+        updateVisuals();
+    }
 }
