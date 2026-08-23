@@ -8,15 +8,27 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+    
     - name: Set up JDK 17
       uses: actions/setup-java@v5
       with:
         distribution: 'temurin'
         java-version: '17'
-    - name: Build mod jar
+    
+    - name: Set up Android SDK
+      uses: android-actions/setup-android@v3
+    
+    - name: Install Android build-tools
+      run: sdkmanager "build-tools;34.0.0"
+    
+    - name: Set up PATH for d8
+      run: echo "${ANDROID_HOME}/build-tools/34.0.0" >> $GITHUB_PATH
+    
+    - name: Build mod jar (deploy with dex)
       run: |
         chmod +x ./gradlew
-        ./gradlew jar
+        ./gradlew deploy
+    
     - name: Upload built jar file
       uses: actions/upload-artifact@v4
       with:
