@@ -20,5 +20,6 @@ jobs:
     - name: Upload built jar file
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ github.event.repository.name }}
-        path: build/libs/${{ github.event.repository.name }}.jar
+        name: RedTeamAI
+        path: build/libs/RedTeamAI.jar
+        if-no-files-found: error
