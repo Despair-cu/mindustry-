@@ -3,33 +3,15 @@ plugins {
 }
 
 repositories {
+    flatDir { dirs 'libs' }
     mavenCentral()
-    maven { url "https://www.jitpack.io" }
-}
-
-ext {
-    mindustryVersion = "v7.0.146"
 }
 
 dependencies {
-    compileOnly "com.github.Anuken:Arc:1.139.1"
-    compileOnly "com.github.Anuken:Mindustry:v146"
+    compileOnly fileTree(dir: 'libs', includes: ['*.jar'])
 }
 
 jar {
     archiveFileName.set("RedTeamAI.jar")
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-}
-
-tasks.register('deploy') {
-    dependsOn 'jar'
-    doLast {
-        def d8 = System.getProperty('os.name').toLowerCase().contains('windows') ? "d8.bat" : "d8"
-        def jarFile = jar.archiveFile.get().asFile
-        def outputJar = file("build/libs/${project.name}.jar")
-        def dependencies = (configurations.compileClasspath.asList() + configurations.runtimeClasspath.asList()).collect {
-            "--classpath $it.path"
-        }.join(" ")
-        "$d8 $dependencies --min-api 14 --output $outputJar $jarFile".execute(null, new File("build/libs")).waitForProcessOutput(System.out, System.err)
-    }
 }
