@@ -3,27 +3,41 @@ plugins {
 }
 
 repositories {
-    // 优先本地 libs/ 目录（放 Mindustry.jar / MindustryX loader.jar 即可）
-    flatDir { dirs 'libs' }
     mavenCentral()
+    maven { url "https://www.jitpack.io" }
 }
 
 dependencies {
-    // 方式1（推荐）：把下载到的 Mindustry.jar（v159.7）或 MindustryX loader.jar 放进 libs/
-    implementation fileTree(dir: 'libs', include: ['*.jar'])
-    // 方式2（备选，需网络）：com.github.Anuken:Mindustry:v159.7
-    // implementation 'com.github.Anuken:Mindustry:v159.7'
+    // 使用 compileOnly，运行时由游戏提供，不打包进Jar
+    compileOnly "com.github.Anuken:Arc:1.139.1"
+    compileOnly "com.github.Anuken:Mindustry:v159.7"
 }
 
 jar {
     manifest {
         attributes 'Implementation-Title': 'RedTeamAI'
     }
-    // 不打包依赖进 jar（Mindustry Mod 运行时由游戏提供类）
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
 java {
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
+}
+
+// 官方模板的 deploy 任务（调用 d8 打包跨平台 Jar）
+tasks.register('deploy') {
+    dependsOn 'jar'
+    doLast {
+        def dependencies = (configurations.compileClasspath.asList() + configurations.runtimeClasspath.asList()).collect {
+            "--classpath $it.path"
+        }.join(" ")
+        
+        def d8 = System.getProperty('os.name').toLowerCase().contains('windows') ? "d8.bat" : "d8"
+        def jarFile = jar.archiveFile.get().asFile
+        def outputJar = file("build/libs/${project.name}.jar")
+        
+        // 调用 d8 进行 dex 转换
+        "$d8 $dependencies --min-api 14 --output $outputJar $jarFile".execute(null, new File("build/libs")).waitForProcessOutput(System.out, System.err)
+    }
 }
