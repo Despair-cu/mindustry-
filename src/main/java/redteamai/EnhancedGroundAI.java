@@ -5,17 +5,17 @@ import mindustry.ai.types.GroundAI;
 import mindustry.gen.Groups;
 import mindustry.gen.Unit;
 import mindustry.gen.Building;
+import mindustry.world.blocks.defense.turrets.Turret;
 
 public class EnhancedGroundAI extends GroundAI {
 
     @Override
     public void updateMovement() {
-        // 检查目标是否有效（Teamc 没有 dead() 方法，需要按实际类型判断）
+        // 目标有效性检查（Teamc 没有 dead()，按实际类型判断）
         if (target == null) {
             super.updateMovement();
             return;
         }
-        
         boolean targetAlive = false;
         if (target instanceof Unit) {
             targetAlive = !((Unit) target).dead();
@@ -33,11 +33,13 @@ public class EnhancedGroundAI extends GroundAI {
         float desired = range * 0.95f;
         float dist = unit.dst(target);
 
-        // 手动统计目标附近 180 范围内的敌方炮塔数量
+        // 统计目标附近 180 范围内的敌方炮塔数量
+        // 判断依据：单位脚下有建筑，且该建筑是 Turret 类型
         int turretCount = 0;
-        for (var u : Groups.unit) {
+        for (Unit u : Groups.unit) {
             if (u == null || u.dead || u.team == unit.team) continue;
-            if (u.buildOn() != null && u.buildOn().block.hasTurret) {
+            Building b = u.buildOn();
+            if (b != null && b.block instanceof Turret) {
                 float dx = u.x - tx;
                 float dy = u.y - ty;
                 if (dx * dx + dy * dy <= 180f * 180f) {
@@ -57,7 +59,7 @@ public class EnhancedGroundAI extends GroundAI {
                 moveTo(new Vec2(tx + perpX, ty + perpY), 0);
             }
         } else {
-            // 卡射程：距离大于 desired+10 就前进，否则站定
+            // 卡射程
             if (dist > desired + 10f) {
                 moveTo(new Vec2(tx, ty), 0);
             }
