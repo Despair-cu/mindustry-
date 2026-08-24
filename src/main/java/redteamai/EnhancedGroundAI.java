@@ -108,12 +108,33 @@ public class EnhancedGroundAI extends GroundAI {
 
     private Building findBestTarget() {
         float range = unit.range();
-        Building bestTurret = null; float bestTD = Float.MAX_VALUE;
-        Building best = null; float bestD = Float.MAX_VALUE; int bestP = 0;
+        Building bestTurret = null;
+        float bestTDist = Float.MAX_VALUE;
+        Building best = null;
+        float bestDist = Float.MAX_VALUE;
+        int bestPri = 0;
         for (Building b : Groups.build) {
             if (b == null || b.dead) continue;
             if (b.team == unit.team || b.team == mindustry.game.Team.derelict) continue;
             float d = unit.dst(b);
             if (b.block instanceof Turret && d <= range) {
                 if (b.power != null && b.power.status < 0.1f) continue;
-                if (d < bestTD
+                if (d < bestTDist) { bestTDist = d; bestTurret = b; }
+                continue;
+            }
+            int p = priority(b);
+            if (p == 0) continue;
+            if (p > bestPri || (p == bestPri && d < bestDist)) {
+                bestPri = p; bestDist = d; best = b;
+            }
+        }
+        return (bestTurret != null) ? bestTurret : best;
+    }
+
+    private int priority(Building b) {
+        if (b.block instanceof PowerGenerator) return 3;
+        if (b.block instanceof UnitFactory) return 3;
+        if (b.block instanceof Turret) return 0;
+        return 1;
+    }
+}
