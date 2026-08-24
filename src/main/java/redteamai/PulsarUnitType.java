@@ -2,13 +2,12 @@ package redteamai;
 
 import arc.graphics.Color;
 import arc.graphics.g2d.Draw;
-import arc.graphics.g2d.Drawf;       // ✅ 从 arc 包导入，不依赖 mindustry.gen
 import arc.graphics.g2d.Fill;
 import arc.graphics.g2d.Lines;
 import arc.math.Angles;
 import arc.math.Mathf;
-import arc.struct.Seq;               // ✅ 用于武器列表
-import arc.util.Time;                // ✅ 用全局时间代替 unit.time
+import arc.struct.Seq;
+import arc.util.Time;
 import mindustry.gen.Unit;
 import mindustry.gen.UnitEntity;
 import mindustry.type.UnitType;
@@ -30,9 +29,7 @@ public class PulsarUnitType extends UnitType {
 
         constructor = UnitEntity::create;
 
-        // ✅ v8 里武器是 Seq<Weapon> 列表，不是单个 weapon 字段
         weapons = new Seq<>();
-        
         outlineColor = Color.valueOf("00000000");
     }
 
@@ -40,24 +37,22 @@ public class PulsarUnitType extends UnitType {
     public void draw(Unit unit) {
         float x = unit.x;
         float y = unit.y;
-        // ✅ 用 Time.time（全局时间）代替 unit.time，避免找不到符号
         float time = Time.time;
 
         float pulse = Mathf.sin(time, pulseSpeed, 1f);
         float radius = baseRadius + pulse * 3f;
 
         // 扩散波纹
-        float waveProgress = (time % pulseSpeed) / pulseSpeed;
+        float waveProgress = (time % 40f) / 40f;
         float waveRadius = waveProgress * baseRadius * 3.5f;
         float waveAlpha = 1f - waveProgress;
 
-        // ✅ 直接用数字指定渲染层级，不依赖 Layer 类
         Draw.z(100f); // 相当于 Layer.effect
         Draw.color(coreColor, waveAlpha * 0.4f);
         Lines.stroke(2f + pulse);
         Lines.circle(x, y, waveRadius);
 
-        // 外发光
+        // 外发光（模拟光晕，替代 Drawf.light）
         Draw.z(110f); // 相当于 Layer.flyingUnitLow
         Draw.color(outerColor, 0.25f + pulse * 0.1f);
         Fill.circle(x, y, radius * 1.6f);
@@ -94,9 +89,6 @@ public class PulsarUnitType extends UnitType {
             Fill.circle(sx, sy, Mathf.rand.random(1f, 2.5f));
         }
         Mathf.rand.setSeed(0);
-
-        // ✅ Drawf 现在从 arc.graphics.g2d 导入，肯定能找到
-        Drawf.light(x, y, radius * 3.5f, coreColor, 0.7f);
 
         Draw.reset();
     }
