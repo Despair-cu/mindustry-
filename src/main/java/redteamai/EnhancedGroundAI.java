@@ -15,10 +15,9 @@ public class EnhancedGroundAI extends GroundAI {
 
     private static final float TILE = 8f;
     private static final float RETREAT_DIST = 2f;
-    private static final float RALLY_RADIUS = 80f;   // 集合点判定半径
+    private static final float RALLY_RADIUS = 80f;
     private static final float SIDE_BIAS = 90f;
 
-    // 全局进攻标志：一旦全军开始进攻，所有兵都不再回集合点
     private static boolean globalAttacking = false;
     private int frameCount = 0;
 
@@ -28,6 +27,7 @@ public class EnhancedGroundAI extends GroundAI {
             if (unit == null || unit.dead()) return;
             frameCount++;
 
+            // 刷新目标（含：射程内是否有炮塔优先索敌）
             if (target == null || isTargetDead(target)) {
                 target = findBestTarget();
             }
@@ -39,7 +39,7 @@ public class EnhancedGroundAI extends GroundAI {
             float range = unit.range();
             float retreatAt = range - RETREAT_DIST * TILE;
 
-            // 敌进我退（任何时候都生效）
+            // 敌进我退（对任何目标通用）
             if (dist < retreatAt) {
                 float dx = unit.x - tx, dy = unit.y - ty;
                 float len = (float)Math.sqrt(dx*dx + dy*dy);
@@ -54,23 +54,18 @@ public class EnhancedGroundAI extends GroundAI {
 
             // ===== 集结阶段 =====
             if (!globalAttacking) {
-                // 还没全军进攻：先去核心集合
                 if (rally != null && unit.dst(rally) > RALLY_RADIUS) {
-                    // 朝核心移动（挤过去集合）
                     moveTo(new Vec2(rally.x, rally.y), RALLY_RADIUS * 0.4f);
                     if (frameCount % 60 == 0)
                         Log.info("[RedTeamAI] " + unit.type.name + " 集合 " + RedTeamAIMod.cruxGroundCount() + "/" + rushThreshold());
                     unit.lookAt(tx, ty); updateWeapons(); updateVisuals(); updateMovement();
                     return;
                 }
-
-                // 已在核心旁：检查人数是否达标
                 int friends = RedTeamAIMod.cruxGroundCount();
                 if (friends >= rushThreshold()) {
                     globalAttacking = true;
                     Log.info("[RedTeamAI] >>> 全军进攻! 人数=" + friends);
                 } else {
-                    // 人数不够且在集合点旁：原地待命
                     unit.moveAt(Vec2.ZERO);
                     if (frameCount % 60 == 0)
                         Log.info("[RedTeamAI] " + unit.type.name + " 等待 " + friends + "/" + rushThreshold());
@@ -79,10 +74,26 @@ public class EnhancedGroundAI extends GroundAI {
                 }
             }
 
-            // ===== 进攻阶段（挤成一团朝目标推进）=====
-            boolean isUnitTarget = (target instanceof Unit);
+            // ===== 进攻阶段 =====
+            boolean isTurret = (target instanceof Building) && (((Building)target).block instanceof Turret);
 
-            if (isUnitTarget) {
+            if (isTurret) {
+                // 对炮塔：保持拉扯距离（同单位目标），拆完炮塔再继续推进
+                float desired = retreatAt * 0.85f;
+                if (dist > desired + 12f) {
+                    moveTo(new Vec2(tx, ty), desired);
+                    if (frameCount % 60 == 0)
+                        Log.info("[RedTeamAI] " + unit.type.name + " 接近炮塔 dist=" + (int)dist);
+                } else if (dist < desired - 12f) {
+                    float dx = unit.x - tx, dy = unit.y - ty;
+                    float len = (float)Math.sqrt(dx*dx + dy*dy);
+                    if (len > 0.01f) moveTo(new Vec2(unit.x + (dx/len)*50f, unit.y + (dy/len)*50f), 0);
+                } else {
+                    if (frameCount % 60 == 0)
+                        Log.info("[RedTeamAI] " + unit.type.name + " 炮塔在射程内，站桩输出");
+                }
+            } else if (target instanceof Unit) {
+                // 对单位：保持拉扯
                 float desired = retreatAt * 0.85f;
                 if (dist > desired + 12f) {
                     moveTo(new Vec2(tx, ty), desired);
@@ -91,15 +102,13 @@ public class EnhancedGroundAI extends GroundAI {
                     float len = (float)Math.sqrt(dx*dx + dy*dy);
                     if (len > 0.01f) moveTo(new Vec2(unit.x + (dx/len)*50f, unit.y + (dy/len)*50f), 0);
                 }
-                if (frameCount % 60 == 0)
-                    Log.info("[RedTeamAI] " + unit.type.name + " 进攻单位目标 dist=" + (int)dist);
             } else {
+                // 对建筑（非炮塔）：威胁度决定绕道 or 直冲
                 float turretThreat = threatAt(tx, ty);
                 int hotspot = RedTeamAIMod.threatAtPoint(tx, ty);
                 float totalThreat = turretThreat + hotspot * 2f;
 
                 if (totalThreat >= 6f) {
-                    // 高威胁绕侧
                     float dx = tx - unit.x, dy = ty - unit.y;
                     float len = (float)Math.sqrt(dx*dx + dy*dy);
                     if (len > 0.01f) {
@@ -114,13 +123,12 @@ public class EnhancedGroundAI extends GroundAI {
                             Log.info("[RedTeamAI] " + unit.type.name + " 绕侧 threat=" + (int)totalThreat);
                     }
                 } else {
-                    // 低威胁：直冲卡射程（挤成一团一起冲）
                     float desired = range * 0.8f;
                     if (dist > desired + 12f) {
                         moveTo(new Vec2(tx, ty), desired);
                     }
                     if (frameCount % 60 == 0)
-                        Log.info("[RedTeamAI] " + unit.type.name + " 直冲建筑 dist=" + (int)dist + " threat=" + (int)totalThreat);
+                        Log.info("[RedTeamAI] " + unit.type.name + " 直冲建筑 dist=" + (int)dist);
                 }
             }
 
@@ -131,6 +139,31 @@ public class EnhancedGroundAI extends GroundAI {
         } catch (Exception ex) {
             Log.err("[RedTeamAI] 异常: " + ex.getMessage());
         }
+    }
+
+    /** 目标选取：优先射程内的炮塔；否则按优先级选建筑 */
+    private Building findBestTarget() {
+        float range = unit.range();
+        Building bestTurret = null; float bestTD = Float.MAX_VALUE;
+        Building best = null; float bestD = Float.MAX_VALUE; int bestP = 0;
+
+        for (Building b : Groups.build) {
+            if (b == null || b.dead) continue;
+            if (b.team == unit.team || b.team == mindustry.game.Team.derelict) continue;
+
+            float d = unit.dst(b);
+
+            // 射程内的炮塔：优先索敌最近的
+            if (b.block instanceof Turret && d <= range) {
+                if (b.power != null && b.power.status < 0.1f) continue; // 没电的不算
+                if (d < bestTD) { bestTD = d; bestTurret = b; }
+                continue;
+            }
+
+            int p = priority(b); if (p == 0) continue;
+            if (p > bestP || (p == bestP && d < bestD)) { bestP = p; bestD = d; best = b; }
+        }
+        return (bestTurret != null) ? bestTurret : best;
     }
 
     private int rushThreshold() {
@@ -164,18 +197,6 @@ public class EnhancedGroundAI extends GroundAI {
             int size = b.block.size; sum += size*size;
         }
         return sum;
-    }
-
-    private Building findBestTarget() {
-        Building best = null; float bestD = Float.MAX_VALUE; int bestP = 0;
-        for (Building b : Groups.build) {
-            if (b == null || b.dead) continue;
-            if (b.team == unit.team || b.team == mindustry.game.Team.derelict) continue;
-            int p = priority(b); if (p == 0) continue;
-            float d = unit.dst(b);
-            if (p > bestP || (p == bestP && d < bestD)) { bestP = p; bestD = d; best = b; }
-        }
-        return best;
     }
 
     private int priority(Building b) {
