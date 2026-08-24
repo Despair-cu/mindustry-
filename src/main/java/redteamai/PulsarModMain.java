@@ -96,7 +96,7 @@ public class PulsarModMain extends Mod {
         public float pulseSpeed = 35f;
         public float baseRadius = 10f;
         public float dps = 60f;
-        public float jetLengthMul = 25f;
+        public float jetLengthMul = 40f; // ✅ 从25加到40
 
         public BluePulsarUnitType(String name) {
             super(name);
@@ -181,9 +181,10 @@ public class PulsarModMain extends Mod {
             Draw.z(0f);
         }
 
+        // ✅ 浓密版流动喷流（更密、更细、带溅射）
         private void drawFlowingJet(float x, float y, float angle, float length, long seed) {
             Mathf.rand.setSeed(seed);
-            float step = 3.5f;
+            float step = 2.0f; // ✅ 从3.5降到2.0，密度大幅提升
             for (float d = 5f; d < length; d += step) {
                 float t = d / length;
                 float flowPhase = Time.time / 10f - d * 0.2f;
@@ -194,13 +195,25 @@ public class PulsarModMain extends Mod {
                 float py = y + Angles.trnsy(finalAngle, d);
 
                 float pSize = 1.5f - t * 0.5f;
-                pSize = pSize > 0.3f ? pSize : 0.3f;
+                pSize = pSize > 0.2f ? pSize : 0.2f; // ✅ 更细，下限0.2
 
                 float flicker = (Mathf.sin(flowPhase * 1.5f) + 1f) / 2f;
                 float alpha = (1f - t) * (0.6f + flicker * 0.4f);
 
                 Draw.color(jetColor, alpha);
                 Fill.circle(px, py, pSize);
+
+                // ✅ 次级溅射粒子（模拟喷涌散射）
+                if (Mathf.rand.chance(0.3f)) {
+                    float sprayAngle = finalAngle + Mathf.rand.range(15f, 30f);
+                    float sprayDist = d + Mathf.rand.random(5f, 15f);
+                    float spx = x + Angles.trnsx(sprayAngle, sprayDist);
+                    float spy = y + Angles.trnsy(sprayAngle, sprayDist);
+                    float spraySize = pSize * Mathf.rand.random(0.3f, 0.6f);
+                    float sprayAlpha = alpha * Mathf.rand.random(0.2f, 0.4f);
+                    Draw.color(jetColor, sprayAlpha);
+                    Fill.circle(spx, spy, spraySize);
+                }
             }
             Mathf.rand.setSeed(0);
         }
