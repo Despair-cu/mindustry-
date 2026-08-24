@@ -8,6 +8,7 @@ import arc.graphics.g2d.Lines;
 import arc.math.Angles;
 import arc.math.Mathf;
 import arc.struct.Seq;
+import arc.util.Log;
 import arc.util.Time;
 import mindustry.gen.Groups;
 import mindustry.gen.Unit;
@@ -38,7 +39,7 @@ public class PulsarModMain extends Mod {
 
         public float gravityRange = 150f;
         public float gravityStrength = 1.0f;
-        public float suckDamage = 1000000f;   // ✅ 黄矮星独有
+        public float suckDamage = 1000000f;
 
         public YellowDwarfUnitType(String name) {
             super(name);
@@ -64,7 +65,7 @@ public class PulsarModMain extends Mod {
                     float angle = Angles.angle(unit.x, unit.y, u.x, u.y);
                     u.x -= Angles.trnsx(angle, gravityStrength);
                     u.y -= Angles.trnsy(angle, gravityStrength);
-                    u.damage(suckDamage * Time.delta);   // ✅ 只有黄矮星有吸入伤害
+                    u.damage(suckDamage * Time.delta);
                 }
                 float dynamicKillRange = unit.hitSize + u.hitSize + 5f;
                 if (dst <= dynamicKillRange) {
@@ -123,7 +124,7 @@ public class PulsarModMain extends Mod {
             constructor = UnitEntity::create;
             weapons = new Seq<>();
             outlineColor = Color.valueOf("00000000");
-            region = Core.atlas.find("clear");   // 屏蔽原版贴图
+            region = Core.atlas.find("clear");
             localizedName = "中子星";
         }
 
@@ -133,7 +134,6 @@ public class PulsarModMain extends Mod {
             float length = unit.hitSize * jetLengthMul;
             float damage = dps * Time.delta;
 
-            // ✅ 射线左右（0° / 180°）
             for (int sign : new int[]{1, -1}) {
                 float a = (sign > 0 ? 0f : 180f);
                 float ex = unit.x + Angles.trnsx(a, length);
@@ -146,14 +146,11 @@ public class PulsarModMain extends Mod {
                 if (u == null || u.dead) continue;
                 if (u.team == sourceTeam) continue;
                 float dst = Mathf.dst(unit.x, unit.y, u.x, u.y);
-
                 if (dst < gravityRange) {
                     float angle = Angles.angle(unit.x, unit.y, u.x, u.y);
                     u.x -= Angles.trnsx(angle, gravityStrength);
                     u.y -= Angles.trnsy(angle, gravityStrength);
-                    // ✅ 无吸入伤害
                 }
-
                 float dynamicKillRange = unit.hitSize + u.hitSize + 5f;
                 if (dst <= dynamicKillRange) {
                     if (DEBUG) Log.info("[PulsarMod] 中子星吞噬 " + u.type);
@@ -170,12 +167,10 @@ public class PulsarModMain extends Mod {
             float radius = baseRadius + pulse * 2f;
             float length = radius * jetLengthMul;
 
-            // ✅ 射线左右
             Draw.z(85f);
             drawFlowingJet(x, y, 0f, length, time, unit.id);
             drawFlowingJet(x, y, 180f, length * 0.9f, time, unit.id + 1000);
 
-            // 实心核心（无洞）
             Draw.z(110f);
             Draw.color(coreColor);
             Fill.circle(x, y, radius * 0.75f);
@@ -247,7 +242,7 @@ public class PulsarModMain extends Mod {
             constructor = UnitEntity::create;
             weapons = new Seq<>();
             outlineColor = Color.valueOf("00000000");
-            region = Core.atlas.find("clear");   // 屏蔽原版贴图，保证纯黑
+            region = Core.atlas.find("clear");
             localizedName = "黑洞";
         }
 
@@ -255,7 +250,6 @@ public class PulsarModMain extends Mod {
         public void update(Unit unit) {
             unit.health = health;
 
-            // ✅ 射线上下（90° / 270°）+ 射线伤害
             for (int sign : new int[]{1, -1}) {
                 float a = 90f * sign;
                 float ex = unit.x + Angles.trnsx(a, jetLength);
@@ -268,14 +262,11 @@ public class PulsarModMain extends Mod {
                 if (u == null || u.dead) continue;
                 if (u.team == sourceTeam) continue;
                 float dst = Mathf.dst(unit.x, unit.y, u.x, u.y);
-
                 if (dst < gravityRange) {
                     float angle = Angles.angle(unit.x, unit.y, u.x, u.y);
                     u.x -= Angles.trnsx(angle, gravityStrength);
                     u.y -= Angles.trnsy(angle, gravityStrength);
-                    // ✅ 无吸入伤害
                 }
-
                 float dynamicKillRange = unit.hitSize + u.hitSize + 5f;
                 if (dst <= dynamicKillRange) {
                     if (DEBUG) Log.info("[PulsarMod] 黑洞吞噬 " + u.type);
@@ -287,17 +278,15 @@ public class PulsarModMain extends Mod {
         @Override
         public void draw(Unit unit) {
             Draw.reset();
-            float x = unit.x, y = unit.y, time = unit.time;
+            float x = unit.x, y = unit.y;
+            float time = Time.time;   // ✅ 修复：原来是 unit.time
 
-            // 1. 上下双向狂暴射线（底层）
             Draw.z(85f);
             drawViolentJets(x, y, time);
 
-            // 2. 椭圆黄蓝吸积盘（中层）
             Draw.z(95f);
             drawEllipticalDisk(x, y, time);
 
-            // 3. 纯黑核心（顶层）
             Draw.z(110f);
             Draw.color(Color.black);
             Fill.circle(x, y, baseRadius);
@@ -314,7 +303,7 @@ public class PulsarModMain extends Mod {
             float travel = time * particleSpeed;
             Mathf.rand.setSeed(0);
             for (int sign : new int[]{1, -1}) {
-                float angle = 90f * sign;   // ✅ 上下
+                float angle = 90f * sign;
                 for (int i = 0; i < particleCount; i++) {
                     float dist = (travel + i * spacing) % jetLength;
                     float t = dist / jetLength;
