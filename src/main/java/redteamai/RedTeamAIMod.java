@@ -18,15 +18,15 @@ public class RedTeamAIMod extends Mod {
         Log.info("[RedTeamAI] === Mod init() 开始 ===");
 
         // 世界加载完成后立即接管一波
-        Events.on(WorldLoadEvent.class, e -> {
+        Events.run(WorldLoadEvent.class, () -> {
             Log.info("[RedTeamAI] 收到 WorldLoadEvent，开始初始接管...");
             int n = takeOverAll();
             totalBound += n;
             Log.info("[RedTeamAI] >>> 初始接管完成，本次绑定 " + n + " 个，累计 " + totalBound + " 个");
         });
 
-        // 之后每 30 tick 轮询一次，抓新刷出来的单位
-        Events.on(Trigger.update, () -> {
+        // ★ 就改了这里：Events.on → Events.run ★
+        Events.run(Trigger.update, () -> {
             tickCounter++;
             if (tickCounter % 30 == 0) {
                 int n = takeOverAll();
@@ -42,11 +42,9 @@ public class RedTeamAIMod extends Mod {
 
     /**
      * 遍历红队所有单位，把地面单位换成 EnhancedGroundAI
-     * @return 本次新接管的单位数
      */
     private int takeOverAll() {
         try {
-            // 拿红队（crux）的 TeamData，里面有 units 列表
             var teamData = mindustry.Vars.state.teams.get(Team.crux);
             if (teamData == null || teamData.units == null) {
                 Log.warn("[RedTeamAI] teamData 或 units 为 null");
@@ -56,22 +54,18 @@ public class RedTeamAIMod extends Mod {
             int scanned = 0;
             int bound = 0;
 
-            // 遍历红队所有单位
             for (Unit u : teamData.units) {
                 if (u == null || u.dead) continue;
                 scanned++;
 
-                // 只接管地面单位（飞行单位用 FlyingAI，换了反而坏）
                 if (u.isFlying()) continue;
-
-                // 已经是我们的 AI 就跳过
                 if (u.controller() instanceof EnhancedGroundAI) continue;
 
                 try {
                     EnhancedGroundAI ai = new EnhancedGroundAI();
-                    ai.unit(u);   // 设置 unit 引用
-                    ai.init();    // 初始化（父类 AIController.init()）
-                    u.controller(ai);  // 替换控制器
+                    ai.unit(u);
+                    ai.init();
+                    u.controller(ai);
                     bound++;
                     Log.info("[RedTeamAI] 已接管单位: " + u.type + " (id=" + u.id + ")");
                 } catch (Exception ex) {
@@ -86,7 +80,6 @@ public class RedTeamAIMod extends Mod {
 
         } catch (Exception ex) {
             Log.err("[RedTeamAI] takeOverAll 异常: " + ex.getMessage());
-            ex.printStackTrace();
             return 0;
         }
     }
