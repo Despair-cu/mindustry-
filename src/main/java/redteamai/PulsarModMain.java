@@ -105,7 +105,7 @@ public class PulsarModMain extends Mod {
             float pulse = Mathf.sin(time, pulseSpeed, 1f);
             float radius = baseRadius + pulse * 2f;
 
-            // 喷流长度（加长了！之前是 radius*6，现在 radius*12）
+            // 喷流长度（长！粒子喷射）
             float jetLength = radius * 12f + pulse * 6f;
             float jetAngle = unit.rotation + Mathf.sin(time, 60f, 8f);
 
@@ -158,29 +158,25 @@ public class PulsarModMain extends Mod {
         private void drawJet(float x, float y, float angle, float length, float pulse, float time, long seed) {
             Mathf.rand.setSeed(seed);
 
-            int particleCount = 20; // 每根喷流的粒子数
+            int particleCount = 20;
 
             for (int i = 0; i < particleCount; i++) {
-                float t = (float) i / particleCount; // 0~1，沿喷流方向
+                float t = (float) i / particleCount;
                 float dist = t * length;
 
-                // 粒子沿喷流方向有随机偏移（越往外越散开）
-                float spread = t * 4f; // 扩散程度
+                float spread = t * 4f;
                 float offsetAngle = Mathf.rand.random(-spread, spread);
                 float finalAngle = angle + offsetAngle;
 
                 float px = x + Angles.trnsx(finalAngle, dist);
                 float py = y + Angles.trnsy(finalAngle, dist);
 
-                // 粒子大小：靠近核心大，越往外越小
                 float pSize = (3f - t * 2.5f) + pulse * 0.5f;
-                pSize = Mathf.max(pSize, 0.5f);
+                pSize = pSize > 0.5f ? pSize : 0.5f; // ✅ 已修复，不依赖 Mathf.max
 
-                // 颜色：靠近核心偏白，越往外越紫
                 float colorMix = t;
                 Color particleColor = Color.white.lerp(jetColor, colorMix * 0.7f);
 
-                // 透明度：靠近核心不透明，尾部渐隐
                 float alpha = (1f - t) * (0.8f + pulse * 0.2f);
 
                 Draw.color(particleColor, alpha);
