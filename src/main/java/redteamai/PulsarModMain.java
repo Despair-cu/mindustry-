@@ -119,7 +119,7 @@ public class PulsarModMain extends Mod {
         private final float baseRadius = 8f;
         private final int particleCount = 300;
         private final float particleSpeed = 22f;
-        private final float jetLength = 160f;       // ✅ 加长 160
+        private final float jetLength = 160f;       // ✅ 加长
         private final float dps = 150f;
 
         private final float gravityRange = 180f;
@@ -134,12 +134,10 @@ public class PulsarModMain extends Mod {
             constructor = UnitEntity::create;
             weapons = new Seq<>();
             outlineColor = Color.valueOf("00000000");
-            // ✅ 彻底屏蔽原版一切渲染，消灭洞
+            // ✅ 屏蔽原版贴图（只保留你版本里存在的字段）
             region = Core.atlas.find("clear");
             drawBody = false;
             drawCell = false;
-            drawControl = false;
-            drawSoftShadow = false;
             localizedName = "中子星";
         }
 
@@ -147,7 +145,7 @@ public class PulsarModMain extends Mod {
         public void update(Unit unit) {
             unit.health = health;
 
-            float swing = Mathf.sin(Time.time, 25f, 8f);
+            float swing = Mathf.sin(Time.time, 25f, 8f);  // ✅ 快摆动
             float damage = dps * Time.delta;
             for (int sign : new int[]{1, -1}) {
                 float a = (sign > 0 ? 0f : 180f) + swing;
@@ -178,7 +176,6 @@ public class PulsarModMain extends Mod {
 
         @Override
         public void draw(Unit unit) {
-            // ✅ 不调用 super.draw()，自己全权绘制
             Draw.reset();
             float x = unit.x, y = unit.y, time = Time.time;
 
@@ -188,7 +185,7 @@ public class PulsarModMain extends Mod {
             drawNeutronJet(x, y, 0f + swing, time, unit.id);
             drawNeutronJet(x, y, 180f + swing, time, unit.id + 1000);
 
-            // ✅ 实心核心（加大一点确保无洞）
+            // ✅ 实心核心（无洞）
             Draw.z(110f);
             Draw.color(coreColor);
             Fill.circle(x, y, baseRadius * 1.5f);
@@ -199,14 +196,15 @@ public class PulsarModMain extends Mod {
             Draw.z(0f);
         }
 
+        // ✅ 加长加细的粒子射线
         private void drawNeutronJet(float x, float y, float angle, float time, long seed) {
-            float spacing = 1.5f; // ✅ 间距拉大，粒子更稀疏更细
+            float spacing = 1.5f;
             float travel = time * particleSpeed;
             Mathf.rand.setSeed(seed);
             for (int i = 0; i < particleCount; i++) {
                 float dist = (travel + i * spacing) % jetLength;
                 float t = dist / jetLength;
-                float spread = t * 3f; // ✅ 散射减小，射线更集中
+                float spread = t * 3f;
                 float offset = Mathf.rand.random(-spread, spread);
                 float a = angle + offset;
                 float px = x + Angles.trnsx(a, dist);
@@ -219,7 +217,7 @@ public class PulsarModMain extends Mod {
 
                 float flicker = (Mathf.sin(dist * 0.15f - time * 0.4f) + 1f) / 2f;
                 float alpha = (1f - t * 0.8f) * (0.5f + flicker * 0.5f);
-                // ✅ 加细：基础尺寸从 1.3f 砍到 0.7f
+                // ✅ 细：基础尺寸砍半
                 float size = (0.7f - t * 0.5f) * Mathf.rand.random(0.6f, 1.0f);
                 size = Math.max(size, 0.12f);
 
@@ -247,7 +245,7 @@ public class PulsarModMain extends Mod {
     }
 
     // ====================================================================
-    //  黑洞：保持上一轮满意的效果不变
+    //  黑洞：保持满意版本不变
     // ====================================================================
     public static class BlackHoleUnitType extends UnitType {
 
