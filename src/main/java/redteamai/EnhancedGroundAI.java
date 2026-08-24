@@ -16,11 +16,11 @@ public class EnhancedGroundAI extends GroundAI {
             updateTargeting();
 
             if (target == null) {
-                super.updateUnit(); // 没目标走原版待机
+                super.updateUnit();
                 return;
             }
 
-            // 2. 检查目标存活
+            // 2. 目标存活检查
             boolean targetAlive = false;
             if (target instanceof Unit) {
                 targetAlive = !((Unit) target).dead();
@@ -34,19 +34,18 @@ public class EnhancedGroundAI extends GroundAI {
                 return;
             }
 
-            // ========== 核心修复：让单位转向目标 ==========
+            // ===== 核心：让单位转向目标 =====
             unit.lookAt(target.x(), target.y());
-            // ==============================================
 
-            // 3. 距离判断：超出射程才移动，进了就站桩
+            // 3. 距离判断
             float dist = unit.dst(target);
             float range = unit.range();
-            float desiredDist = range * 0.85f;
+            float desired = range * 0.85f;
 
-            if (dist > desiredDist + 15f) {
-                moveTo(new Vec2(target.x(), target.y()), desiredDist);
+            if (dist > desired + 15f) {
+                moveTo(new Vec2(target.x(), target.y()), desired);
             } else {
-                unit.moveAt(Vec2.ZERO); // 站住不动，稳稳输出
+                unit.moveAt(Vec2.ZERO); // 站桩输出
             }
 
             // 4. 开火 + 动画
@@ -54,7 +53,7 @@ public class EnhancedGroundAI extends GroundAI {
             updateVisuals();
 
         } catch (Exception ex) {
-            // 静默
+            // 静默，避免刷屏
         }
     }
 }
