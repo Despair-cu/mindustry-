@@ -2,7 +2,7 @@ package redteamai;
 
 import arc.Events;
 import arc.util.Time;
-import mindustry.Vars;
+import mindustry.core.Log;
 import mindustry.game.EventType.Trigger;
 import mindustry.game.EventType.WorldLoadEvent;
 import mindustry.game.Team;
@@ -14,10 +14,10 @@ public class RedTeamAIMod extends Mod {
 
     @Override
     public void init() {
-        Vars.log.info("[RedTeamAI] Mod 初始化");
+        Log.info("[RedTeamAI] Mod 初始化");
 
         Events.run(WorldLoadEvent.class, () -> {
-            Vars.log.info("[RedTeamAI] 世界加载，执行首次全量接管...");
+            Log.info("[RedTeamAI] 世界加载，执行首次全量接管...");
             takeOverAll();
         });
 
@@ -26,11 +26,11 @@ public class RedTeamAIMod extends Mod {
             pollAndReplace();
         });
 
-        Vars.log.info("[RedTeamAI] 监听器注册完成 (使用轮询模式)");
+        Log.info("[RedTeamAI] 监听器注册完成 (使用轮询模式)");
     }
 
     private void pollAndReplace() {
-        // 每 10 帧检查一次（Time.time 是游戏时间，每帧 +1）
+        // 每 10 帧检查一次
         if (Time.time % 10 != 0) return;
 
         int replaced = 0;
@@ -52,15 +52,15 @@ public class RedTeamAIMod extends Mod {
                 replaced++;
 
                 if (replaced % 5 == 0) {
-                    Vars.log.info("[RedTeamAI] 本轮已替换: " + replaced + " 个");
+                    Log.info("[RedTeamAI] 本轮已替换: " + replaced + " 个");
                 }
             } catch (Exception ex) {
-                Vars.log.err("[RedTeamAI] 替换失败: " + u.type.name + " - " + ex.getMessage());
+                Log.err("[RedTeamAI] 替换失败: " + u.type.name + " - " + ex.getMessage());
             }
         }
 
         if (replaced > 0) {
-            Vars.log.info("[RedTeamAI] ✅ 轮询接管完成，本次替换了 " + replaced + " 个单位");
+            Log.info("[RedTeamAI] ✅ 轮询接管完成，本次替换了 " + replaced + " 个单位");
         }
     }
 
@@ -80,9 +80,9 @@ public class RedTeamAIMod extends Mod {
                     count++;
                 }
             } catch (Exception ex) {
-                Vars.log.err("[RedTeamAI] 初始替换失败: " + ex.getMessage());
+                Log.err("[RedTeamAI] 初始替换失败: " + ex.getMessage());
             }
         }
-        Vars.log.info("[RedTeamAI] >>> 初始接管了 " + count + " 个地面单位");
+        Log.info("[RedTeamAI] >>> 初始接管了 " + count + " 个地面单位");
     }
 }
