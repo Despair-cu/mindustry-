@@ -43,6 +43,8 @@ public class PulsarModMain extends Mod {
 
         @Override
         public void draw(Unit unit) {
+            Draw.reset(); // ✅ 开头重置，防止污染UI
+
             float x = unit.x, y = unit.y, time = Time.time;
             float pulse = Mathf.sin(time, pulseSpeed, 1f);
             float radius = baseRadius + pulse * 3f;
@@ -77,7 +79,7 @@ public class PulsarModMain extends Mod {
                 Fill.circle(x + Angles.trnsx(sa, sd), y + Angles.trnsy(sa, sd), Mathf.rand.random(1f, 2.5f));
             }
             Mathf.rand.setSeed(0);
-            Draw.reset();
+            Draw.reset(); // ✅ 结尾重置
         }
     }
 
@@ -101,41 +103,43 @@ public class PulsarModMain extends Mod {
 
         @Override
         public void draw(Unit unit) {
+            Draw.reset(); // ✅ 关键：防止污染游戏界面
+
             float x = unit.x, y = unit.y, time = Time.time;
             float pulse = Mathf.sin(time, pulseSpeed, 1f);
             float radius = baseRadius + pulse * 2f;
 
-            // 喷流长度（长！粒子喷射）
-            float jetLength = radius * 12f + pulse * 6f;
+            // 喷流长度（更长！）
+            float jetLength = radius * 20f + pulse * 8f;
             float jetAngle = unit.rotation + Mathf.sin(time, 60f, 8f);
 
             Draw.z(95f);
 
-            // ===== 两极粒子喷射 =====
-            drawJet(x, y, jetAngle, jetLength, pulse, time, unit.id);
-            drawJet(x, y, jetAngle + 180f, jetLength * 0.9f, pulse, time, unit.id + 1);
+            // 两极动态粒子流
+            drawJet(x, y, jetAngle, jetLength, pulse, unit.id);
+            drawJet(x, y, jetAngle + 180f, jetLength * 0.9f, pulse, unit.id + 1);
 
-            // ===== 波纹 =====
+            // 波纹
             Draw.z(100f);
             float waveProgress = (time % 35f) / 35f;
             Draw.color(coreColor, (1f - waveProgress) * 0.5f);
             Lines.stroke(2f + pulse * 1.5f);
             Lines.circle(x, y, waveProgress * baseRadius * 4f);
 
-            // ===== 外发光 =====
+            // 外发光
             Draw.z(110f);
             Draw.color(outerColor, 0.3f + pulse * 0.15f);
             Fill.circle(x, y, radius * 1.8f);
 
-            // ===== 核心 =====
+            // 核心
             Draw.color(coreColor);
             Fill.circle(x, y, radius * 0.75f);
 
-            // ===== 高光 =====
+            // 高光
             Draw.color(Color.white, 0.85f);
             Fill.circle(x, y, radius * 0.3f);
 
-            // ===== 旋转节点 =====
+            // 旋转节点
             for (int i = 0; i < 6; i++) {
                 float angle = time * (30f + i * 5f) + (i * 60f);
                 float dist = radius * 0.55f;
@@ -143,7 +147,7 @@ public class PulsarModMain extends Mod {
                 Fill.circle(x + Angles.trnsx(angle, dist), y + Angles.trnsy(angle, dist), 2f + pulse * 1.5f);
             }
 
-            // ===== 星火 =====
+            // 星火
             Mathf.rand.setSeed(unit.id);
             for (int i = 0; i < 5; i++) {
                 float sa = Mathf.rand.random(360f), sd = Mathf.rand.random(radius * 0.6f, radius * 2.5f);
@@ -151,36 +155,56 @@ public class PulsarModMain extends Mod {
                 Fill.circle(x + Angles.trnsx(sa, sd), y + Angles.trnsy(sa, sd), Mathf.rand.random(1f, 2.5f));
             }
             Mathf.rand.setSeed(0);
-            Draw.reset();
+            Draw.reset(); // ✅ 关键：必须重置，否则UI会被染色
         }
 
-        // 粒子喷射方法
-        private void drawJet(float x, float y, float angle, float length, float pulse, float time, long seed) {
+        // 动态粒子流
+        private void drawJet(float x, float y, float angle, float length, float pulse, long seed) {
             Mathf.rand.setSeed(seed);
 
-            int particleCount = 20;
+            // 粒子密度随长度增加：每单位距离一个粒子
+            int particleCount = (int)(length / 3f);
+            particleCount = Mathf.clamp(particleCount, 15, 80); // 限制上限，避免卡顿
 
             for (int i = 0; i < particleCount; i++) {
-                float t = (float) i / particleCount;
+                float t = (float) i / particleCount; // 0（核心端）→ 1（末端）
                 float dist = t * length;
 
-                float spread = t * 4f;
+                // 越往外扩散越大（锥形喷流）
+                float spread = t * 6f;
                 float offsetAngle = Mathf.rand.random(-spread, spread);
-                float finalAngle = angle + offsetAngle;
+                // 添加螺旋效果：粒子沿喷流有轻微的旋转
+                float spiral = Mathf.sin(t * 12f + pulse * 2f) * t * 3f;
+                float finalAngle = angle + offsetAngle + spiral;
 
                 float px = x + Angles.trnsx(finalAngle, dist);
                 float py = y + Angles.trnsy(finalAngle, dist);
 
-                float pSize = (3f - t * 2.5f) + pulse * 0.5f;
-                pSize = pSize > 0.5f ? pSize : 0.5f; // ✅ 已修复，不依赖 Mathf.max
+                // 粒子大小：核心端粗，末端细
+                float pSize = (4f - t * 3.5f) + pulse * 0.5f;
+                pSize = pSize > 0.5f ? pSize : 0.5f;
 
-                float colorMix = t;
-                Color particleColor = Color.white.lerp(jetColor, colorMix * 0.7f);
+                // 颜色渐变：核心白 → 蓝 → 紫 → 暗紫（末端）
+                Color particleColor;
+                if (t < 0.3f) {
+                    particleColor = Color.white.lerp(coreColor, t / 0.3f);
+                } else if (t < 0.7f) {
+                    particleColor = coreColor.lerp(jetColor, (t - 0.3f) / 0.4f);
+                } else {
+                    particleColor = jetColor.lerp(outerColor, (t - 0.7f) / 0.3f);
+                }
 
-                float alpha = (1f - t) * (0.8f + pulse * 0.2f);
+                // 透明度：核心端最亮，末端渐隐
+                float alpha = (1f - t * 0.8f) * (0.85f + pulse * 0.15f);
 
                 Draw.color(particleColor, alpha);
                 Fill.circle(px, py, pSize);
+
+                // 部分粒子加一层"光晕"（更大更透明）
+                if (i % 3 == 0) {
+                    Draw.color(particleColor, alpha * 0.3f);
+                    Fill.circle(px, py, pSize * 2.2f);
+                }
             }
 
             Mathf.rand.setSeed(0);
