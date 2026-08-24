@@ -1,9 +1,15 @@
 package redteamai;
 
 import arc.Events;
-import arc.util.Log;
-import mindustry.game.EventType.*;
+import arc.Log;
+import arc.math.geom.Vec2;
+import arc.util.Time;
+import mindustry.ai.types.GroundAI;
+import mindustry.content.Blocks;
+import mindustry.game.EventType.Trigger;
+import mindustry.game.EventType.WorldLoadEvent;
 import mindustry.game.Team;
+import mindustry.gen.Building;
 import mindustry.gen.Groups;
 import mindustry.gen.Unit;
 import mindustry.mod.Mod;
@@ -14,44 +20,73 @@ public class RedTeamAIMod extends Mod {
     public void init() {
         Log.info("[RedTeamAI] Mod 初始化");
 
-        // 世界加载完成，接管场上所有红队地面单位
         Events.on(WorldLoadEvent.class, e -> {
-            Log.info("[RedTeamAI] 世界加载，开始接管...");
+            Log.info("[RedTeamAI] 世界加载，执行首次全量接管...");
             takeOverAll();
         });
 
-        // 工厂生产的单位
-        Events.on(UnitCreateEvent.class, e -> {
-            Unit u = e.unit;
-            if (u == null || u.dead) return;
-            if (u.team != Team.crux || u.isFlying()) return;
-            replaceAI(u);
+        // 放弃 UnitCreateEvent，改用每帧轮询
+        Events.on(Trigger.update, () -> {
+            pollAndReplace();
         });
 
-        Log.info("[RedTeamAI] 监听器注册完成");
+        Log.info("[RedTeamAI] 监听器注册完成 (使用轮询模式)");
+    }
+
+    private void pollAndReplace() {
+        // 每 10 帧检查一次，减轻性能压力
+        if (Time.frame % 10 != 0) return;
+
+        int replaced = 0;
+        for (Unit u : Groups.unit) {
+            if (u == null || u.dead) continue;
+            
+            // 只处理红队和玩家队，跳过飞行单位
+            if (u.team != Team.crux && u.team != Team.sharded) continue;
+            if (u.isFlying()) continue;
+            
+            // 如果已经是自定义 AI，跳过
+            if (u.controller() instanceof EnhancedGroundAI) continue;
+
+            try {
+                EnhancedGroundAI ai = new EnhancedGroundAI();
+                u.controller(ai);
+                ai.unit(u);
+                ai.init();
+                replaced++;
+                
+                if (replaced % 5 == 0) {
+                    Log.info("[RedTeamAI] 本轮已替换: " + replaced + " 个");
+                }
+            } catch (Exception ex) {
+                Log.err("[RedTeamAI] 替换失败: " + u.type.name + " - " + ex.getMessage());
+            }
+        }
+        
+        if (replaced > 0) {
+            Log.info("[RedTeamAI] ✅ 轮询接管完成，本次替换了 " + replaced + " 个单位");
+        }
     }
 
     private void takeOverAll() {
         int count = 0;
         for (Unit u : Groups.unit) {
             if (u == null || u.dead) continue;
-            if (u.team != Team.crux) continue;
+            if (u.team != Team.crux && u.team != Team.sharded) continue;
             if (u.isFlying()) continue;
-            replaceAI(u);
-            count++;
+            
+            try {
+                if (!(u.controller() instanceof EnhancedGroundAI)) {
+                    EnhancedGroundAI ai = new EnhancedGroundAI();
+                    u.controller(ai);
+                    ai.unit(u);
+                    ai.init();
+                    count++;
+                }
+            } catch (Exception ex) {
+                Log.err("[RedTeamAI] 初始替换失败: " + ex.getMessage());
+            }
         }
-        Log.info("[RedTeamAI] >>> 接管了 " + count + " 个红队地面单位");
-    }
-
-    private void replaceAI(Unit u) {
-        if (u.controller() instanceof EnhancedGroundAI) return;
-        try {
-            EnhancedGroundAI ai = new EnhancedGroundAI();
-            u.controller(ai);
-            ai.unit(u);
-            ai.init();
-        } catch (Exception ex) {
-            Log.err("[RedTeamAI] 替换失败: " + ex.getMessage());
-        }
+        Log.info("[RedTeamAI] >>> 初始接管了 " + count + " 个地面单位");
     }
 }
