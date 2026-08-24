@@ -18,7 +18,7 @@ import mindustry.type.UnitType;
 
 public class PulsarModMain extends Mod {
 
-    public static boolean DEBUG = true;
+    public static boolean DEBUG = false;
 
     @Override
     public void loadContent() {
@@ -98,12 +98,9 @@ public class PulsarModMain extends Mod {
         public float dps = 60f;
         public float jetLengthMul = 40f;
 
+        // 粒子束参数（纯数学计算，不存任何状态）
         public int particleCount = 120;
-        public float particleSpeed = 8f;
-
-        private transient Seq<JetParticle> northParticles;
-        private transient Seq<JetParticle> southParticles;
-        private boolean initialized = false;
+        public float particleSpeed = 12f;  // 像素/秒，控制流动速度
 
         public BluePulsarUnitType(String name) {
             super(name);
@@ -119,60 +116,12 @@ public class PulsarModMain extends Mod {
         public void update(Unit unit) {
             float length = unit.hitSize * jetLengthMul;
             float jetAngle = unit.rotation + Mathf.sin(Time.time, 60f, 8f);
-
-            if (!initialized) {
-                initParticles(unit, length);
-                initialized = true;
-            }
-
-            float delta = Time.delta;
-            updateJetParticles(northParticles, length, delta, unit.id);
-            updateJetParticles(southParticles, length, delta, unit.id + 1000);
-
-            applyJetDamage(unit, jetAngle, length);
-        }
-
-        private void initParticles(Unit unit, float length) {
-            northParticles = new Seq<>(particleCount);
-            southParticles = new Seq<>(particleCount);
-            Mathf.rand.setSeed(unit.id);
-            for (int i = 0; i < particleCount; i++) northParticles.add(createParticle(length));
-            Mathf.rand.setSeed(unit.id + 1000);
-            for (int i = 0; i < particleCount; i++) southParticles.add(createParticle(length));
-            Mathf.rand.setSeed(0);
-        }
-
-        private JetParticle createParticle(float length) {
-            JetParticle p = new JetParticle();
-            p.dist = Mathf.rand.random(0f, length);  // ✅ random 双参数
-            p.offset = Mathf.rand.random(-2.5f, 2.5f); // ✅ random 双参数
-            p.speed = particleSpeed * Mathf.rand.random(0.8f, 1.2f); // ✅ random
-            p.size = Mathf.rand.random(0.4f, 1.0f);  // ✅ random
-            p.phase = Mathf.rand.random(360f);
-            return p;
-        }
-
-        private void updateJetParticles(Seq<JetParticle> particles, float length, float delta, long seed) {
-            Mathf.rand.setSeed(seed);
-            for (int i = 0; i < particles.size; i++) {
-                JetParticle p = particles.items[i];
-                p.dist += p.speed * delta;
-                if (p.dist > length) {
-                    p.dist = 0f;
-                    p.offset = Mathf.rand.random(-2.5f, 2.5f); // ✅ random
-                    p.size = Mathf.rand.random(0.4f, 1.0f);      // ✅ random
-                    p.phase = Mathf.rand.random(360f);
-                }
-            }
-            Mathf.rand.setSeed(0);
-        }
-
-        private void applyJetDamage(Unit source, float jetAngle, float length) {
             float damage = dps * Time.delta;
+
             for (int sign : new int[]{1, -1}) {
-                float ex = source.x + Angles.trnsx(jetAngle, length * sign);
-                float ey = source.y + Angles.trnsy(jetAngle, length * sign);
-                int hit = applyDamageAlongLine(source, source.x, source.y, ex, ey, source.hitSize * 0.8f, damage);
+                float ex = unit.x + Angles.trnsx(jetAngle, length * sign);
+                float ey = unit.y + Angles.trnsy(jetAngle, length * sign);
+                int hit = applyDamageAlongLine(unit, unit.x, unit.y, ex, ey, unit.hitSize * 0.8f, damage);
                 if (DEBUG && hit > 0) {
                     Log.info("[PulsarMod] 喷流命中 " + hit + " 个单位");
                 }
@@ -191,25 +140,31 @@ public class PulsarModMain extends Mod {
             float jetLength = radius * jetLengthMul;
             float jetAngle = unit.rotation + Mathf.sin(time, 60f, 8f);
 
-            drawParticleJet(northParticles, x, y, jetAngle, jetLength, time, unit.id);
-            drawParticleJet(southParticles, x, y, jetAngle + 180f, jetLength * 0.9f, time, unit.id + 1000);
+            // 纯数学计算绘制流动粒子束，零状态
+            drawFlowingJet(x, y, jetAngle, jetLength, time, unit.id);
+            drawFlowingJet(x, y, jetAngle + 180f, jetLength * 0.9f, time, unit.id + 1000);
 
+            // 核心波纹
             Draw.z(100f);
             float waveProgress = (time % 35f) / 35f;
             Draw.color(coreColor, (1f - waveProgress) * 0.5f);
             Lines.stroke(2f + pulse * 1.5f);
             Lines.circle(x, y, waveProgress * baseRadius * 4f);
 
+            // 外发光
             Draw.z(110f);
             Draw.color(outerColor, 0.3f + pulse * 0.15f);
             Fill.circle(x, y, radius * 1.8f);
 
+            // 核心
             Draw.color(coreColor);
             Fill.circle(x, y, radius * 0.75f);
 
+            // 高光
             Draw.color(Color.white, 0.85f);
             Fill.circle(x, y, radius * 0.3f);
 
+            // 旋转节点
             for (int i = 0; i < 6; i++) {
                 float angle = time * (30f + i * 5f) + (i * 60f);
                 float dist = radius * 0.55f;
@@ -221,44 +176,56 @@ public class PulsarModMain extends Mod {
             Draw.z(0f);
         }
 
-        private void drawParticleJet(Seq<JetParticle> particles, float x, float y, float angle, float length, float time, long seed) {
-            if (particles == null) return;
+        // ✅ 纯数学流动粒子束（无状态、不存数组、绝不闪退）
+        private void drawFlowingJet(float x, float y, float angle, float length, float time, long seed) {
+            float spacing = length / particleCount;  // 粒子间距
+            float travel = time * particleSpeed;     // 已飞行的距离
+
             Mathf.rand.setSeed(seed);
-            for (int i = 0; i < particles.size; i++) {
-                JetParticle p = particles.items[i];
-                float t = p.dist / length;
 
+            for (int i = 0; i < particleCount; i++) {
+                // ✅ 核心公式：粒子位置 = (已飞行距离 + 偏移) % 总长度
+                float dist = (travel + i * spacing) % length;
+                float t = dist / length;  // 0→1 归一化位置
+
+                // 锥形扩散：越往外越散
                 float spread = t * 3f;
-                float finalAngle = angle + p.offset + Mathf.sin(time / 20f + p.phase) * 0.05f;
-                float finalOffset = p.offset * (1f + t * 1.5f);
+                float offset = Mathf.rand.random(-spread, spread);
+                float finalAngle = angle + offset;
 
-                float px = x + Angles.trnsx(finalAngle, p.dist) + Angles.trnsx(finalAngle + 90f, finalOffset);
-                float py = y + Angles.trnsy(finalAngle, p.dist) + Angles.trnsy(finalAngle + 90f, finalOffset);
+                float px = x + Angles.trnsx(finalAngle, dist);
+                float py = y + Angles.trnsy(finalAngle, dist);
 
+                // 颜色渐变：核心白→蓝→亮青→暗紫
                 Color c;
-                if (t < 0.3f) c = Color.white.lerp(Color.cyan, t / 0.3f);
-                else if (t < 0.7f) c = Color.cyan.lerp(jetColor, (t - 0.3f) / 0.4f);
-                else c = jetColor.lerp(outerColor, (t - 0.7f) / 0.3f);
+                if (t < 0.2f) c = Color.white.lerp(Color.cyan, t / 0.2f);
+                else if (t < 0.6f) c = Color.cyan.lerp(jetColor, (t - 0.2f) / 0.4f);
+                else c = jetColor.lerp(outerColor, (t - 0.6f) / 0.4f);
 
-                float flicker = (Mathf.sin(time / 8f + p.phase) + 1f) / 2f;
-                float alpha = (1f - t * 0.8f) * (0.5f + flicker * 0.5f);
+                // 闪烁流动感
+                float flicker = (Mathf.sin(dist * 0.1f - time * 0.3f) + 1f) / 2f;
+                float alpha = (1f - t * 0.85f) * (0.5f + flicker * 0.5f);
 
-                float size = (1.2f - t * 0.9f) * p.size;
+                // 大小：核心粗，末端细
+                float size = (1.0f - t * 0.8f) * Mathf.rand.random(0.6f, 1.0f);
                 size = size > 0.15f ? size : 0.15f;
 
                 Draw.color(c, alpha);
                 Fill.circle(px, py, size);
+
+                // 次级溅射（少量）
+                if (Mathf.rand.chance(0.08f)) {
+                    float sprayAngle = finalAngle + Mathf.rand.range(15f);
+                    float sprayDist = dist + Mathf.rand.random(3f, 10f);
+                    float spx = x + Angles.trnsx(sprayAngle, sprayDist);
+                    float spy = y + Angles.trnsy(sprayAngle, sprayDist);
+                    Draw.color(c, alpha * 0.4f);
+                    Fill.circle(spx, spy, size * 0.5f);
+                }
             }
+
             Mathf.rand.setSeed(0);
         }
-    }
-
-    public static class JetParticle {
-        public float dist;
-        public float offset;
-        public float speed;
-        public float size;
-        public float phase;
     }
 
     private static int applyDamageAlongLine(Unit source, float x1, float y1, float x2, float y2, float width, float damage) {
@@ -270,9 +237,6 @@ public class PulsarModMain extends Mod {
             if (distanceToSegment(u.x, u.y, x1, y1, x2, y2) <= width + u.hitSize) {
                 u.damage(damage);
                 hit++;
-                if (DEBUG && hit <= 3) {
-                    Log.info("[PulsarMod] 命中 " + u.type + " HP剩余=" + (u.health - damage));
-                }
             }
         }
         return hit;
