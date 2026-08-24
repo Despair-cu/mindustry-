@@ -36,7 +36,7 @@ public class PulsarModMain extends Mod {
 
         public YellowDwarfUnitType(String name) {
             super(name);
-            health = 450; speed = 1.4f; rotateSpeed = 8f;
+            health = 450; speed = 0f; rotateSpeed = 8f;
             hitSize = baseRadius * 2f;
             constructor = UnitEntity::create;
             weapons = new Seq<>();
@@ -90,25 +90,32 @@ public class PulsarModMain extends Mod {
     }
 
     public static class BluePulsarUnitType extends UnitType {
-        public Color coreColor = Color.valueOf("5b6cff");
-        public Color outerColor = Color.valueOf("9d4dff");
+        public Color coreColor = Color.valueOf("00e5ff");
+        public Color outerColor = Color.valueOf("0099cc");
         public Color jetColor = Color.valueOf("00e5ff");
         public float pulseSpeed = 35f;
         public float baseRadius = 10f;
         public float dps = 60f;
         public float jetLengthMul = 40f;
 
-        // 粒子束参数（纯数学计算，不存任何状态）
-        public int particleCount = 120;
-        public float particleSpeed = 12f;  // 像素/秒，控制流动速度
+        public int particleCount = 180;
+        public float particleSpeed = 12f;
+
+        // 引力/吞噬参数
+        public float gravityRange = 150f;   // 引力作用范围
+        public float gravityStrength = 3.0f; // 每帧拉动距离（像素）
+        public float killRange = 15f;       // 小于这个距离直接杀掉
 
         public BluePulsarUnitType(String name) {
             super(name);
-            health = 500; speed = 1.2f; rotateSpeed = 12f;
+            health = 999999f;
+            speed = 0f;                      // ✅ 不可移动
+            rotateSpeed = 12f;
             hitSize = baseRadius * 2f;
             constructor = UnitEntity::create;
             weapons = new Seq<>();
             outlineColor = Color.valueOf("00000000");
+            invincible = true;               // ✅ 不可死亡
             localizedName = "中子星";
         }
 
@@ -118,12 +125,37 @@ public class PulsarModMain extends Mod {
             float jetAngle = unit.rotation + Mathf.sin(Time.time, 60f, 8f);
             float damage = dps * Time.delta;
 
+            // 喷流伤害
             for (int sign : new int[]{1, -1}) {
                 float ex = unit.x + Angles.trnsx(jetAngle, length * sign);
                 float ey = unit.y + Angles.trnsy(jetAngle, length * sign);
-                int hit = applyDamageAlongLine(unit, unit.x, unit.y, ex, ey, unit.hitSize * 0.8f, damage);
-                if (DEBUG && hit > 0) {
-                    Log.info("[PulsarMod] 喷流命中 " + hit + " 个单位");
+                applyDamageAlongLine(unit, unit.x, unit.y, ex, ey, unit.hitSize * 0.8f, damage);
+            }
+
+            // ✅ 引力 + 吞噬（代码杀）
+            Team sourceTeam = unit.team;
+            for (Unit u : Groups.unit) {
+                if (u == null || u.dead || u.isFlying()) continue;
+                if (u.team == sourceTeam) continue;
+
+                float dst = Mathf.dst(unit.x, unit.y, u.x, u.y);
+
+                if (dst < gravityRange) {
+                    // 计算指向核心的方向
+                    float angle = Angles.angle(unit.x, unit.y, u.x, u.y); // 从核心指向敌人
+                    // 把敌人往反方向（即核心方向）拉
+                    u.x -= Angles.trnsx(angle, gravityStrength);
+                    u.y -= Angles.trnsy(angle, gravityStrength);
+
+                    if (DEBUG) {
+                        Log.info("[PulsarMod] 吸引 " + u.type + " dst=" + (int) dst);
+                    }
+                }
+
+                // ✅ 到达核心范围 → 代码杀
+                if (dst <= killRange) {
+                    if (DEBUG) Log.info("[PulsarMod] 吞噬 " + u.type);
+                    u.kill(); // 被吸的单位直接死亡
                 }
             }
         }
@@ -140,7 +172,6 @@ public class PulsarModMain extends Mod {
             float jetLength = radius * jetLengthMul;
             float jetAngle = unit.rotation + Mathf.sin(time, 60f, 8f);
 
-            // 纯数学计算绘制流动粒子束，零状态
             drawFlowingJet(x, y, jetAngle, jetLength, time, unit.id);
             drawFlowingJet(x, y, jetAngle + 180f, jetLength * 0.9f, time, unit.id + 1000);
 
@@ -176,44 +207,40 @@ public class PulsarModMain extends Mod {
             Draw.z(0f);
         }
 
-        // ✅ 纯数学流动粒子束（无状态、不存数组、绝不闪退）
+        // ✅ 亮蓝流动粒子束（加宽、浓密）
         private void drawFlowingJet(float x, float y, float angle, float length, float time, long seed) {
-            float spacing = length / particleCount;  // 粒子间距
-            float travel = time * particleSpeed;     // 已飞行的距离
+            float spacing = length / particleCount;
+            float travel = time * particleSpeed;
 
             Mathf.rand.setSeed(seed);
-
             for (int i = 0; i < particleCount; i++) {
-                // ✅ 核心公式：粒子位置 = (已飞行距离 + 偏移) % 总长度
                 float dist = (travel + i * spacing) % length;
-                float t = dist / length;  // 0→1 归一化位置
+                float t = dist / length;
 
-                // 锥形扩散：越往外越散
-                float spread = t * 3f;
+                // ✅ 加宽：spread 从 t*3 提到 t*5
+                float spread = t * 5f;
                 float offset = Mathf.rand.random(-spread, spread);
                 float finalAngle = angle + offset;
 
                 float px = x + Angles.trnsx(finalAngle, dist);
                 float py = y + Angles.trnsy(finalAngle, dist);
 
-                // 颜色渐变：核心白→蓝→亮青→暗紫
+                // ✅ 全部亮蓝渐变
                 Color c;
-                if (t < 0.2f) c = Color.white.lerp(Color.cyan, t / 0.2f);
-                else if (t < 0.6f) c = Color.cyan.lerp(jetColor, (t - 0.2f) / 0.4f);
-                else c = jetColor.lerp(outerColor, (t - 0.6f) / 0.4f);
+                if (t < 0.3f) c = Color.white.lerp(jetColor, t / 0.3f);
+                else if (t < 0.7f) c = jetColor;
+                else c = jetColor.lerp(outerColor, (t - 0.7f) / 0.3f);
 
-                // 闪烁流动感
                 float flicker = (Mathf.sin(dist * 0.1f - time * 0.3f) + 1f) / 2f;
                 float alpha = (1f - t * 0.85f) * (0.5f + flicker * 0.5f);
 
-                // 大小：核心粗，末端细
                 float size = (1.0f - t * 0.8f) * Mathf.rand.random(0.6f, 1.0f);
                 size = size > 0.15f ? size : 0.15f;
 
                 Draw.color(c, alpha);
                 Fill.circle(px, py, size);
 
-                // 次级溅射（少量）
+                // 次级溅射
                 if (Mathf.rand.chance(0.08f)) {
                     float sprayAngle = finalAngle + Mathf.rand.range(15f);
                     float sprayDist = dist + Mathf.rand.random(3f, 10f);
@@ -223,11 +250,11 @@ public class PulsarModMain extends Mod {
                     Fill.circle(spx, spy, size * 0.5f);
                 }
             }
-
             Mathf.rand.setSeed(0);
         }
     }
 
+    // ✅ 伤害判定（沿线段）
     private static int applyDamageAlongLine(Unit source, float x1, float y1, float x2, float y2, float width, float damage) {
         int hit = 0;
         Team sourceTeam = source.team;
