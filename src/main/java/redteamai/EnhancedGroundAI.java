@@ -131,4 +131,6 @@ public class EnhancedGroundAI extends GroundAI {
             moveTo(new Vec2(x, y), radius);
             moveX = x;
             moveY = y;
-            arr
+        }
+    }
+}
