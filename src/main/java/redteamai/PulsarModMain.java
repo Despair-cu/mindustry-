@@ -28,7 +28,6 @@ public class PulsarModMain extends Mod {
         Log.info("[PulsarMod] 所有单位注册完成");
     }
 
-    // ==================== 黄矮星 ====================
     public static class YellowDwarfUnitType extends UnitType {
         public Color coreColor = Color.valueOf("ffd37f");
         public Color outerColor = Color.valueOf("ff9d00");
@@ -38,8 +37,8 @@ public class PulsarModMain extends Mod {
         public YellowDwarfUnitType(String name) {
             super(name);
             health = Integer.MAX_VALUE;   // ✅ int上限血量
-            speed = 0f;
-            mass = 999999f;
+            speed = 0f;                   // ✅ 不可移动
+            // mass 字段不存在，已删除
             rotateSpeed = 8f;
             hitSize = baseRadius * 2f;
             constructor = UnitEntity::create;
@@ -50,7 +49,7 @@ public class PulsarModMain extends Mod {
 
         @Override
         public void update(Unit unit) {
-            unit.health = health;         // ✅ 每帧回满(int上限)
+            unit.health = health;         // ✅ 每帧回满
         }
 
         @Override
@@ -98,7 +97,6 @@ public class PulsarModMain extends Mod {
         }
     }
 
-    // ==================== 中子星 ====================
     public static class BluePulsarUnitType extends UnitType {
         public Color coreColor = Color.valueOf("00e5ff");
         public Color outerColor = Color.valueOf("0099cc");
@@ -117,8 +115,8 @@ public class PulsarModMain extends Mod {
         public BluePulsarUnitType(String name) {
             super(name);
             health = Integer.MAX_VALUE;   // ✅ int上限血量
-            speed = 0f;
-            mass = 999999f;
+            speed = 0f;                   // ✅ 不可移动
+            // mass 字段不存在，已删除
             rotateSpeed = 12f;
             hitSize = baseRadius * 2f;
             constructor = UnitEntity::create;
@@ -129,23 +127,23 @@ public class PulsarModMain extends Mod {
 
         @Override
         public void update(Unit unit) {
-            unit.health = health;         // ✅ 每帧回满(int上限)
+            unit.health = health;         // ✅ 每帧回满
 
             float length = unit.hitSize * jetLengthMul;
             float jetAngle = unit.rotation + Mathf.sin(Time.time, 60f, 8f);
             float damage = dps * Time.delta;
 
-            // 喷流伤害（对所有单位，包括飞行）
+            // 喷流伤害（对所有单位）
             for (int sign : new int[]{1, -1}) {
                 float ex = unit.x + Angles.trnsx(jetAngle, length * sign);
                 float ey = unit.y + Angles.trnsy(jetAngle, length * sign);
                 applyDamageAlongLine(unit, unit.x, unit.y, ex, ey, unit.hitSize * 0.8f, damage);
             }
 
-            // 引力 + 吞噬（对所有单位，包括飞行）
+            // 引力 + 吞噬（对所有单位，去掉 isFlying）
             Team sourceTeam = unit.team;
             for (Unit u : Groups.unit) {
-                if (u == null || u.dead) continue;           // ✅ 去掉 isFlying 判断
+                if (u == null || u.dead) continue;
                 if (u.team == sourceTeam) continue;
 
                 float dst = Mathf.dst(unit.x, unit.y, u.x, u.y);
@@ -160,7 +158,6 @@ public class PulsarModMain extends Mod {
                     }
                 }
 
-                // 碰到核心边缘就代码杀
                 float dynamicKillRange = unit.hitSize + u.hitSize + 5f;
                 if (dst <= dynamicKillRange) {
                     if (DEBUG) Log.info("[PulsarMod] 吞噬 " + u.type);
@@ -255,12 +252,11 @@ public class PulsarModMain extends Mod {
         }
     }
 
-    // ===== 伤害辅助（对所有单位，包括飞行） =====
     private static int applyDamageAlongLine(Unit source, float x1, float y1, float x2, float y2, float width, float damage) {
         int hit = 0;
         Team sourceTeam = source.team;
         for (Unit u : Groups.unit) {
-            if (u == null || u.dead) continue;              // ✅ 去掉 isFlying 判断
+            if (u == null || u.dead) continue;    // ✅ 对飞行单位也生效
             if (u.team == sourceTeam) continue;
             if (distanceToSegment(u.x, u.y, x1, y1, x2, y2) <= width + u.hitSize) {
                 u.damage(damage);
