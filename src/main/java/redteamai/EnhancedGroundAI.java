@@ -171,7 +171,7 @@ public class EnhancedGroundAI extends GroundAI {
         float r2 = 160f*160f, sum = 0f;
         for (Building b : Groups.build) {
             if (b == null || b.dead) continue;
-            if (b.team == unit.dead() ? null : unit.team) continue;
+            // 修正：正确的队伍判断，跳过己方和中立方
             if (b.team == unit.team || b.team == mindustry.game.Team.derelict) continue;
             if (!(b.block instanceof Turret)) continue;
             if (b.power != null && b.power.status < 0.1f) continue;
