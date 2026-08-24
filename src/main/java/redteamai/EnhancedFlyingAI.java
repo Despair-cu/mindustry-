@@ -21,7 +21,6 @@ public class EnhancedFlyingAI extends FlyingAI {
         try {
             if (unit == null || unit.dead()) return;
             frameCount++;
-
             if (target == null || isTargetDead(target)) target = findBestTarget();
             updateTargeting();
             if (target == null) { super.updateUnit(); return; }
@@ -83,7 +82,6 @@ public class EnhancedFlyingAI extends FlyingAI {
             }
 
             unit.lookAt(tx, ty); updateWeapons(); updateVisuals();
-
         } catch (Exception ex) { Log.err("[RedTeamAI][空] 异常: " + ex.getMessage()); }
     }
 
@@ -105,7 +103,7 @@ public class EnhancedFlyingAI extends FlyingAI {
         for (Building b : Groups.build) {
             if (b == null || b.dead) continue;
             if (b.team == unit.team || b.team == mindustry.game.Team.derelict) continue;
-            if (b.block != null && (b.block == Blocks.coreShard || b.block == Blocks.coreFoundation || b.block == Blocks.coreNucleus)) return b;
+            if (b.block == Blocks.coreShard || b.block == Blocks.coreFoundation || b.block == Blocks.coreNucleus) return b;
         }
         Building best = null; float bestD = Float.MAX_VALUE; int bestP = 0;
         for (Building b : Groups.build) {
@@ -113,4 +111,14 @@ public class EnhancedFlyingAI extends FlyingAI {
             if (b.team == unit.team || b.team == mindustry.game.Team.derelict) continue;
             int p = priority(b); if (p == 0) continue;
             float d = unit.dst(b);
-            if (p > bestP || (p == bestP && d < bestD)) { bestP = p; 
+            if (p > bestP || (p == bestP && d < bestD)) { bestP = p; bestD = d; best = b; }
+        }
+        return best;
+    }
+
+    private int priority(Building b) {
+        if (b.block instanceof PowerGenerator) return 3;
+        if (b.block instanceof UnitFactory) return 3;
+        return 1;
+    }
+}
