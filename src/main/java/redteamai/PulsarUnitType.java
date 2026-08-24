@@ -2,12 +2,13 @@ package redteamai;
 
 import arc.graphics.Color;
 import arc.graphics.g2d.Draw;
+import arc.graphics.g2d.Drawf;       // ✅ 从 arc 包导入，不依赖 mindustry.gen
 import arc.graphics.g2d.Fill;
 import arc.graphics.g2d.Lines;
 import arc.math.Angles;
 import arc.math.Mathf;
-import mindustry.gen.Drawf;
-import mindustry.gen.Layer;
+import arc.struct.Seq;               // ✅ 用于武器列表
+import arc.util.Time;                // ✅ 用全局时间代替 unit.time
 import mindustry.gen.Unit;
 import mindustry.gen.UnitEntity;
 import mindustry.type.UnitType;
@@ -29,7 +30,9 @@ public class PulsarUnitType extends UnitType {
 
         constructor = UnitEntity::create;
 
-        weapon = null;
+        // ✅ v8 里武器是 Seq<Weapon> 列表，不是单个 weapon 字段
+        weapons = new Seq<>();
+        
         outlineColor = Color.valueOf("00000000");
     }
 
@@ -37,7 +40,8 @@ public class PulsarUnitType extends UnitType {
     public void draw(Unit unit) {
         float x = unit.x;
         float y = unit.y;
-        float time = unit.time;
+        // ✅ 用 Time.time（全局时间）代替 unit.time，避免找不到符号
+        float time = Time.time;
 
         float pulse = Mathf.sin(time, pulseSpeed, 1f);
         float radius = baseRadius + pulse * 3f;
@@ -47,13 +51,14 @@ public class PulsarUnitType extends UnitType {
         float waveRadius = waveProgress * baseRadius * 3.5f;
         float waveAlpha = 1f - waveProgress;
 
-        Draw.z(Layer.effect);
+        // ✅ 直接用数字指定渲染层级，不依赖 Layer 类
+        Draw.z(100f); // 相当于 Layer.effect
         Draw.color(coreColor, waveAlpha * 0.4f);
         Lines.stroke(2f + pulse);
         Lines.circle(x, y, waveRadius);
 
         // 外发光
-        Draw.z(Layer.flyingUnitLow);
+        Draw.z(110f); // 相当于 Layer.flyingUnitLow
         Draw.color(outerColor, 0.25f + pulse * 0.1f);
         Fill.circle(x, y, radius * 1.6f);
 
@@ -90,7 +95,7 @@ public class PulsarUnitType extends UnitType {
         }
         Mathf.rand.setSeed(0);
 
-        // 动态光照
+        // ✅ Drawf 现在从 arc.graphics.g2d 导入，肯定能找到
         Drawf.light(x, y, radius * 3.5f, coreColor, 0.7f);
 
         Draw.reset();
