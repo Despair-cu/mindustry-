@@ -1,6 +1,7 @@
 package redteamai;
 
 import arc.math.geom.Vec2;
+import arc.util.Log;
 import mindustry.ai.types.GroundAI;
 import mindustry.gen.Building;
 import mindustry.gen.Groups;
@@ -16,86 +17,101 @@ public class EnhancedGroundAI extends GroundAI {
     private static final float RETREAT_DIST = 2f;
     private static final float RALLY_RADIUS = 60f;
     private static final float SIDE_BIAS = 90f;
-    private static final float RETARGET = 24f; // 目标点变化超24像素才重新寻路
 
     private boolean attacking = false;
-    private float lastMx = Float.NaN, lastMy = Float.NaN;
+    private int frameCount = 0;
 
     @Override
     public void updateUnit() {
         try {
             if (unit == null || unit.dead()) return;
 
-            if (target == null || isTargetDead(target)) target = findBestTarget();
+            frameCount++;
+
+            if (target == null || isTargetDead(target)) {
+                target = findBestTarget();
+                if (frameCount % 60 == 0) Log.info("[RedTeamAI] " + unit.type.name + " 重新选目标");
+            }
             updateTargeting();
-            if (target == null) { super.updateUnit(); return; }
+            if (target == null) {
+                if (frameCount % 60 == 0) Log.info("[RedTeamAI] " + unit.type.name + " 无目标，走原版");
+                super.updateUnit();
+                return;
+            }
 
             float tx = target.x(), ty = target.y();
             float dist = unit.dst(target);
             float range = unit.range();
             float retreatAt = range - RETREAT_DIST * TILE;
 
-            // ===== 敌进我退 =====
+            // 敌进我退
             if (dist < retreatAt) {
                 float dx = unit.x - tx, dy = unit.y - ty;
                 float len = (float) Math.sqrt(dx*dx + dy*dy);
                 if (len > 0.01f) {
-                    // 后退目标点：远离目标 60 像素
                     float bx = unit.x + (dx/len) * 60f;
                     float by = unit.y + (dy/len) * 60f;
-                    doMoveTo(bx, by, 0);
+                    moveTo(new Vec2(bx, by), 0);
+                    if (frameCount % 60 == 0)
+                        Log.info("[RedTeamAI] " + unit.type.name + " 敌进我退 -> (" + (int)bx + "," + (int)by + ")");
                 }
                 unit.lookAt(tx, ty);
-                updateWeapons(); updateVisuals();
+                updateWeapons(); updateVisuals(); updateMovement();
                 return;
             }
 
-            // ===== 聚兵判定 =====
+            // 聚兵判定
             int friends = RedTeamAIMod.cruxGroundCount();
             int threshold = rushThreshold();
             Vec2 rally = rallyPoint();
 
             if (!attacking) {
                 if (rally != null && unit.dst(rally) > RALLY_RADIUS) {
-                    // 去集合点（寻路）
-                    doMoveTo(rally.x, rally.y, RALLY_RADIUS * 0.5f);
-                    unit.lookAt(tx, ty); updateWeapons(); updateVisuals();
+                    moveTo(new Vec2(rally.x, rally.y), RALLY_RADIUS * 0.5f);
+                    if (frameCount % 60 == 0)
+                        Log.info("[RedTeamAI] " + unit.type.name + " 集结中 " + friends + "/" + threshold + " -> (" + (int)rally.x + "," + (int)rally.y + ")");
+                    unit.lookAt(tx, ty); updateWeapons(); updateVisuals(); updateMovement();
                     return;
                 }
                 if (friends >= threshold) {
                     attacking = true;
+                    Log.info("[RedTeamAI] " + unit.type.name + " 进攻开始! 人数=" + friends);
                 } else {
-                    // 已在集合点附近，原地待命（不移动）
                     unit.moveAt(Vec2.ZERO);
+                    if (frameCount % 60 == 0)
+                        Log.info("[RedTeamAI] " + unit.type.name + " 等待集结 " + friends + "/" + threshold);
                     unit.lookAt(tx, ty); updateWeapons(); updateVisuals();
                     return;
                 }
             }
 
-            // ===== 进攻阶段 =====
+            // 进攻阶段
             boolean isUnitTarget = (target instanceof Unit);
 
             if (isUnitTarget) {
-                // 对单位：保持拉扯距离（寻路靠近/后退）
                 float desired = retreatAt * 0.85f;
                 if (dist > desired + 12f) {
-                    doMoveTo(tx, ty, desired);
+                    moveTo(new Vec2(tx, ty), desired);
+                    if (frameCount % 60 == 0)
+                        Log.info("[RedTeamAI] " + unit.type.name + " 接近单位目标 dist=" + (int)dist);
                 } else if (dist < desired - 12f) {
-                    // 太近就后退（寻路远离）
                     float dx = unit.x - tx, dy = unit.y - ty;
                     float len = (float)Math.sqrt(dx*dx + dy*dy);
                     if (len > 0.01f) {
-                        doMoveTo(unit.x + (dx/len)*50f, unit.y + (dy/len)*50f, 0);
+                        moveTo(new Vec2(unit.x + (dx/len)*50f, unit.y + (dy/len)*50f), 0);
                     }
+                    if (frameCount % 60 == 0)
+                        Log.info("[RedTeamAI] " + unit.type.name + " 拉扯后退 dist=" + (int)dist);
+                } else {
+                    if (frameCount % 60 == 0)
+                        Log.info("[RedTeamAI] " + unit.type.name + " 单位目标在射程内，站桩输出");
                 }
             } else {
-                // 对建筑：威胁度决定绕道 or 直冲
                 float turretThreat = threatAt(tx, ty);
                 int hotspot = RedTeamAIMod.threatAtPoint(tx, ty);
                 float totalThreat = turretThreat + hotspot * 2f;
 
                 if (totalThreat >= 6f) {
-                    // 绕侧：选热点少的一侧偏移
                     float dx = tx - unit.x, dy = ty - unit.y;
                     float len = (float)Math.sqrt(dx*dx + dy*dy);
                     if (len > 0.01f) {
@@ -106,36 +122,30 @@ public class EnhancedGroundAI extends GroundAI {
                         float mdx, mdy;
                         if (lHot <= rHot) { mdx = lx; mdy = ly; }
                         else { mdx = rx; mdy = ry; }
-                        doMoveTo(unit.x + mdx*SIDE_BIAS, unit.y + mdy*SIDE_BIAS, 0);
+                        moveTo(new Vec2(unit.x + mdx*SIDE_BIAS, unit.y + mdy*SIDE_BIAS), 0);
+                        if (frameCount % 60 == 0)
+                            Log.info("[RedTeamAI] " + unit.type.name + " 绕侧走 threat=" + (int)totalThreat + " 左热=" + lHot + " 右热=" + rHot);
                     }
                 } else {
-                    // 低威胁：寻路卡射程
                     float desired = range * 0.8f;
                     if (dist > desired + 12f) {
-                        doMoveTo(tx, ty, desired);
+                        moveTo(new Vec2(tx, ty), desired);
+                        if (frameCount % 60 == 0)
+                            Log.info("[RedTeamAI] " + unit.type.name + " 直冲建筑 dist=" + (int)dist + " threat=" + (int)totalThreat);
+                    } else {
+                        if (frameCount % 60 == 0)
+                            Log.info("[RedTeamAI] " + unit.type.name + " 建筑在射程内，站桩输出");
                     }
-                    // 到了射程内：停（moveTo 的 radius 会自然停）
                 }
             }
 
             unit.lookAt(tx, ty);
             updateWeapons(); updateVisuals();
+            updateMovement(); // 每帧执行移动
 
-        } catch (Exception ex) { /* silent */ }
-    }
-
-    // ===== 统一寻路移动入口（带缓存，避免每帧重寻路抖动）=====
-    private void doMoveTo(float x, float y, float radius) {
-        if (Float.isNaN(lastMx) || Float.isNaN(lastMy)) {
-            moveTo(new Vec2(x, y), radius);
-            lastMx = x; lastMy = y; return;
+        } catch (Exception ex) {
+            Log.err("[RedTeamAI] updateUnit异常: " + ex.getMessage());
         }
-        float dx = x - lastMx, dy = y - lastMy;
-        if (dx*dx + dy*dy > RETARGET*RETARGET) {
-            moveTo(new Vec2(x, y), radius);
-            lastMx = x; lastMy = y;
-        }
-        // 否则沿用上一次 moveTo 的路径（不重复调用）
     }
 
     private int rushThreshold() {
@@ -161,6 +171,7 @@ public class EnhancedGroundAI extends GroundAI {
         float r2 = 160f*160f, sum = 0f;
         for (Building b : Groups.build) {
             if (b == null || b.dead) continue;
+            if (b.team == unit.dead() ? null : unit.team) continue;
             if (b.team == unit.team || b.team == mindustry.game.Team.derelict) continue;
             if (!(b.block instanceof Turret)) continue;
             if (b.power != null && b.power.status < 0.1f) continue;
