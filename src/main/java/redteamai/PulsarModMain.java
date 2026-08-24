@@ -108,7 +108,7 @@ public class PulsarModMain extends Mod {
     }
 
     // ====================================================================
-    //  中子星：左右快摆动细射线，彻底无洞
+    //  中子星：左右快摆动，射线1000长，加粗，本体缩小
     // ====================================================================
     public static class BluePulsarUnitType extends UnitType {
 
@@ -116,10 +116,10 @@ public class PulsarModMain extends Mod {
         private final Color outerColor = Color.valueOf("0099cc");
         private final Color jetColor = Color.valueOf("00e5ff");
 
-        private final float baseRadius = 8f;
-        private final int particleCount = 300;
-        private final float particleSpeed = 22f;
-        private final float jetLength = 160f;       // ✅ 加长
+        private final float baseRadius = 5f;            // ✅ 本体缩小（原8f）
+        private final int particleCount = 400;          // ✅ 粒子数增加，覆盖更长距离
+        private final float particleSpeed = 30f;        // ✅ 粒子流速加快
+        private final float jetLength = 1000f;          // ✅ 射线长度 1000
         private final float dps = 150f;
 
         private final float gravityRange = 180f;
@@ -134,7 +134,6 @@ public class PulsarModMain extends Mod {
             constructor = UnitEntity::create;
             weapons = new Seq<>();
             outlineColor = Color.valueOf("00000000");
-            // ✅ 屏蔽原版贴图（只保留你版本里存在的字段）
             region = Core.atlas.find("clear");
             drawBody = false;
             drawCell = false;
@@ -145,7 +144,7 @@ public class PulsarModMain extends Mod {
         public void update(Unit unit) {
             unit.health = health;
 
-            float swing = Mathf.sin(Time.time, 25f, 8f);  // ✅ 快摆动
+            float swing = Mathf.sin(Time.time, 25f, 8f);
             float damage = dps * Time.delta;
             for (int sign : new int[]{1, -1}) {
                 float a = (sign > 0 ? 0f : 180f) + swing;
@@ -179,26 +178,23 @@ public class PulsarModMain extends Mod {
             Draw.reset();
             float x = unit.x, y = unit.y, time = Time.time;
 
-            // 左右快摆动射线
             Draw.z(85f);
             float swing = Mathf.sin(time, 25f, 8f);
             drawNeutronJet(x, y, 0f + swing, time, unit.id);
             drawNeutronJet(x, y, 180f + swing, time, unit.id + 1000);
 
-            // ✅ 实心核心（无洞）
+            // ✅ 核心也跟着 baseRadius=5f 自动缩小
             Draw.z(110f);
             Draw.color(coreColor);
             Fill.circle(x, y, baseRadius * 1.5f);
-            Draw.color(Color.white, 0.9f);
             Fill.circle(x, y, baseRadius * 0.5f);
 
             Draw.reset();
             Draw.z(0f);
         }
 
-        // ✅ 加长加细的粒子射线
         private void drawNeutronJet(float x, float y, float angle, float time, long seed) {
-            float spacing = 1.5f;
+            float spacing = 3.0f;   // ✅ 间距加大，适应1000长度
             float travel = time * particleSpeed;
             Mathf.rand.setSeed(seed);
             for (int i = 0; i < particleCount; i++) {
@@ -217,9 +213,9 @@ public class PulsarModMain extends Mod {
 
                 float flicker = (Mathf.sin(dist * 0.15f - time * 0.4f) + 1f) / 2f;
                 float alpha = (1f - t * 0.8f) * (0.5f + flicker * 0.5f);
-                // ✅ 细：基础尺寸砍半
-                float size = (0.7f - t * 0.5f) * Mathf.rand.random(0.6f, 1.0f);
-                size = Math.max(size, 0.12f);
+                // ✅ 加粗：基础尺寸从 0.7f 提到 1.0f
+                float size = (1.0f - t * 0.6f) * Mathf.rand.random(0.7f, 1.2f);
+                size = Math.max(size, 0.15f);
 
                 Draw.color(c, alpha);
                 Fill.circle(px, py, size);
