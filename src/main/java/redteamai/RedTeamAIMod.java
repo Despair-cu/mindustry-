@@ -9,19 +9,16 @@ import mindustry.gen.Unit;
 import mindustry.mod.Mod;
 
 public class RedTeamAIMod extends Mod {
-
     private int totalBound = 0;
 
     @Override
     public void init() {
         Log.info("[RedTeamAI] === Mod init ===");
-
         Events.run(WorldLoadEvent.class, () -> {
             int n = takeOverAll();
             totalBound += n;
             Log.info("[RedTeamAI] 初始接管 " + n + " 个");
         });
-
         Events.run(Trigger.update, new Runnable() {
             int tick = 0;
             @Override
@@ -33,20 +30,8 @@ public class RedTeamAIMod extends Mod {
                 }
             }
         });
-
-        Log.info("[RedTeamAI] === 监听器注册完成 ===");
     }
 
-    /** 红队当前单位数（地面+空军合计，用于集结阈值） */
-    static int cruxCount() {
-        int c = 0;
-        for (Unit u : mindustry.Vars.state.teams.get(Team.crux).units) {
-            if (u != null && !u.dead) c++;
-        }
-        return c;
-    }
-
-    /** 红队地面单位数 */
     static int cruxGroundCount() {
         int c = 0;
         for (Unit u : mindustry.Vars.state.teams.get(Team.crux).units) {
@@ -64,12 +49,10 @@ public class RedTeamAIMod extends Mod {
                 if (u == null || u.dead) continue;
                 try {
                     if (u.isFlying()) {
-                        // 空军：用 EnhancedFlyingAI
                         if (u.controller() instanceof EnhancedFlyingAI) continue;
                         EnhancedFlyingAI ai = new EnhancedFlyingAI();
                         ai.unit(u); ai.init(); u.controller(ai); bound++;
                     } else {
-                        // 地面：用 EnhancedGroundAI
                         if (u.controller() instanceof EnhancedGroundAI) continue;
                         EnhancedGroundAI ai = new EnhancedGroundAI();
                         ai.unit(u); ai.init(); u.controller(ai); bound++;
