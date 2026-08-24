@@ -9,6 +9,8 @@ import mindustry.gen.Groups;
 import mindustry.gen.Teamc;
 import mindustry.gen.Unit;
 import mindustry.world.blocks.defense.turrets.Turret;
+import mindustry.world.blocks.power.PowerGenerator;
+import mindustry.world.blocks.units.UnitFactory;
 
 public class EnhancedFlyingAI extends FlyingAI {
     private static final float RETREAT_DIST = 2f;
@@ -66,9 +68,10 @@ public class EnhancedFlyingAI extends FlyingAI {
             }
 
             if (threat != null) {
+                Turret t = (Turret) threat.block;
                 float lx = -dy/len, ly = dx/len;
                 float rx = dy/len, ry = -dx/len;
-                float ev = threat.block.range + SAFE_MARGIN + 40f;
+                float ev = t.range + SAFE_MARGIN + 40f;
                 float elX = unit.x + lx*ev, elY = unit.y + ly*ev;
                 float erX = unit.x + rx*ev, erY = unit.y + ry*ev;
                 float dl = (float)Math.sqrt((elX-tx)*(elX-tx) + (elY-ty)*(elY-ty));
