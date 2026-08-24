@@ -9,17 +9,15 @@ import arc.math.Mathf;
 import arc.struct.Seq;
 import arc.util.Log;
 import arc.util.Time;
-import mindustry.Vars;
+import mindustry.gen.Groups;   // ✅
+import mindustry.Vars;          // ✅ （备用，可留可删）
 import mindustry.gen.Unit;
 import mindustry.gen.UnitEntity;
 import mindustry.mod.Mod;
 import mindustry.type.UnitType;
-import mindustry.game.Team;
-import mindustry.game.TeamData;
 
 public class PulsarModMain extends Mod {
 
-    // 调试开关：true=打印伤害日志 + 画判定线，调试完改 false
     public static boolean DEBUG = true;
 
     @Override
@@ -30,7 +28,7 @@ public class PulsarModMain extends Mod {
         Log.info("[PulsarMod] 所有单位注册完成");
     }
 
-    // ==================== 黄矮星（变大版） ====================
+    // ==================== 黄矮星 ====================
     public static class YellowDwarfUnitType extends UnitType {
         public Color coreColor = Color.valueOf("ffd37f");
         public Color outerColor = Color.valueOf("ff9d00");
@@ -39,9 +37,7 @@ public class PulsarModMain extends Mod {
 
         public YellowDwarfUnitType(String name) {
             super(name);
-            health = 450;
-            speed = 1.4f;
-            rotateSpeed = 8f;
+            health = 450; speed = 1.4f; rotateSpeed = 8f;
             hitSize = baseRadius * 2f;
             constructor = UnitEntity::create;
             weapons = new Seq<>();
@@ -94,23 +90,19 @@ public class PulsarModMain extends Mod {
         }
     }
 
-    // ==================== 中子星（亮蓝伤害喷流 + 日志） ====================
+    // ==================== 中子星 ====================
     public static class BluePulsarUnitType extends UnitType {
         public Color coreColor = Color.valueOf("5b6cff");
         public Color outerColor = Color.valueOf("9d4dff");
         public Color jetColor = Color.valueOf("00e5ff");
         public float pulseSpeed = 35f;
         public float baseRadius = 10f;
-
-        // 伤害参数（可调）
-        public float dps = 60f;       // 每秒伤害
-        public float jetLengthMul = 25f; // 喷流长度倍数
+        public float dps = 60f;
+        public float jetLengthMul = 25f;
 
         public BluePulsarUnitType(String name) {
             super(name);
-            health = 500;
-            speed = 1.2f;
-            rotateSpeed = 12f;
+            health = 500; speed = 1.2f; rotateSpeed = 12f;
             hitSize = baseRadius * 2f;
             constructor = UnitEntity::create;
             weapons = new Seq<>();
@@ -121,7 +113,6 @@ public class PulsarModMain extends Mod {
         @Override
         public void update(Unit unit) {
             float length = unit.hitSize * jetLengthMul;
-            // 每帧伤害 = DPS * deltaTime，保证帧率无关
             float damage = dps * Time.delta;
             float jetAngle = unit.rotation + Mathf.sin(Time.time, 60f, 8f);
 
@@ -134,7 +125,7 @@ public class PulsarModMain extends Mod {
                 float ey = unit.y + Angles.trnsy(jetAngle, length * sign);
                 int hit = applyDamageAlongLine(unit, unit.x, unit.y, ex, ey, unit.hitSize * 0.6f, damage);
                 if (DEBUG && hit > 0) {
-                    Log.info("[PulsarMod] 喷流命中 " + hit + " 个单位 @ (" + (int) ex + "," + (int) ey + ")");
+                    Log.info("[PulsarMod] 喷流命中 " + hit + " 个单位");
                 }
             }
         }
@@ -151,7 +142,6 @@ public class PulsarModMain extends Mod {
             float jetLength = radius * jetLengthMul;
             float jetAngle = unit.rotation + Mathf.sin(time, 60f, 8f);
 
-            // 调试：画判定线（红色），确认伤害范围和视觉一致
             if (DEBUG) {
                 Draw.z(29f);
                 Draw.color(Color.red, 0.5f);
@@ -163,31 +153,25 @@ public class PulsarModMain extends Mod {
                 }
             }
 
-            // 流动喷流
             drawFlowingJet(x, y, jetAngle, jetLength, unit.id);
             drawFlowingJet(x, y, jetAngle + 180f, jetLength * 0.9f, unit.id + 1);
 
-            // 波纹
             Draw.z(100f);
             float waveProgress = (time % 35f) / 35f;
             Draw.color(coreColor, (1f - waveProgress) * 0.5f);
             Lines.stroke(2f + pulse * 1.5f);
             Lines.circle(x, y, waveProgress * baseRadius * 4f);
 
-            // 外发光
             Draw.z(110f);
             Draw.color(outerColor, 0.3f + pulse * 0.15f);
             Fill.circle(x, y, radius * 1.8f);
 
-            // 核心
             Draw.color(coreColor);
             Fill.circle(x, y, radius * 0.75f);
 
-            // 高光
             Draw.color(Color.white, 0.85f);
             Fill.circle(x, y, radius * 0.3f);
 
-            // 旋转节点
             for (int i = 0; i < 6; i++) {
                 float angle = time * (30f + i * 5f) + (i * 60f);
                 float dist = radius * 0.55f;
@@ -199,7 +183,6 @@ public class PulsarModMain extends Mod {
             Draw.z(0f);
         }
 
-        // 亮蓝、极细、无呼吸、流动喷流
         private void drawFlowingJet(float x, float y, float angle, float length, long seed) {
             Mathf.rand.setSeed(seed);
             float step = 3.5f;
@@ -225,20 +208,18 @@ public class PulsarModMain extends Mod {
         }
     }
 
-    // ===== 伤害辅助 =====
+    // ===== 伤害辅助：用 Groups.unit 遍历 =====
     private static int applyDamageAlongLine(Unit source, float x1, float y1, float x2, float y2, float width, float damage) {
         int hit = 0;
         Team sourceTeam = source.team;
-        for (TeamData data : Vars.state.teams.data) {
-            if (data.team == sourceTeam) continue;
-            for (Unit u : data.units) {
-                if (u == null || u.dead || u.isFlying()) continue;
-                if (distanceToSegment(u.x, u.y, x1, y1, x2, y2) <= width + u.hitSize) {
-                    u.damage(damage);
-                    hit++;
-                    if (DEBUG && hit <= 3) { // 每帧最多打3条，避免刷屏
-                        Log.info("[PulsarMod] 命中 " + u.type + " HP剩余=" + (u.health - damage));
-                    }
+        for (Unit u : Groups.unit) {          // ✅ 稳定 API
+            if (u == null || u.dead || u.isFlying()) continue;
+            if (u.team == sourceTeam) continue;
+            if (distanceToSegment(u.x, u.y, x1, y1, x2, y2) <= width + u.hitSize) {
+                u.damage(damage);
+                hit++;
+                if (DEBUG && hit <= 3) {
+                    Log.info("[PulsarMod] 命中 " + u.type + " HP剩余=" + (u.health - damage));
                 }
             }
         }
