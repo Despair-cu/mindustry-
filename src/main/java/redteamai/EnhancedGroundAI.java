@@ -4,6 +4,7 @@ import arc.math.geom.Vec2;
 import mindustry.ai.types.GroundAI;
 import mindustry.gen.Building;
 import mindustry.gen.Groups;
+import mindustry.gen.Teamc;
 import mindustry.gen.Unit;
 import mindustry.world.blocks.defense.turrets.Turret;
 import mindustry.world.blocks.power.PowerGenerator;
@@ -22,7 +23,7 @@ public class EnhancedGroundAI extends GroundAI {
         try {
             if (unit == null || unit.dead()) return;
 
-            // 刷新/选取目标（用 isTargetDead 代替 target.dead）
+            // 用 isTargetDead 判断，不再直接调用 target.dead
             if (target == null || isTargetDead(target)) {
                 target = findBestTarget();
             }
@@ -35,7 +36,7 @@ public class EnhancedGroundAI extends GroundAI {
             float range = unit.range();
             float retreatAt = range - (RETREAT_DIST * TILE_SIZE);
 
-            // 敌进我退：目标进入射程-2格就后退
+            // 敌进我退
             if (dist < retreatAt) {
                 float dx = unit.x - tx;
                 float dy = unit.y - ty;
@@ -51,11 +52,10 @@ public class EnhancedGroundAI extends GroundAI {
                 return;
             }
 
-            // 根据目标类型决定移动方式
             boolean isUnitTarget = (target instanceof Unit);
 
             if (isUnitTarget) {
-                // 敌方单位：保持拉扯，不站桩
+                // 敌方单位：保持拉扯
                 float desired = retreatAt * 0.85f;
                 moveTo(new Vec2(tx, ty), desired);
             } else {
@@ -63,7 +63,6 @@ public class EnhancedGroundAI extends GroundAI {
                 float threat = threatAt(tx, ty);
 
                 if (threat >= HIGH_THREAT) {
-                    // 高威胁：绕道
                     float dx = tx - unit.x;
                     float dy = ty - unit.y;
                     float len = (float) Math.sqrt(dx * dx + dy * dy);
@@ -73,7 +72,6 @@ public class EnhancedGroundAI extends GroundAI {
                         moveTo(new Vec2(tx + perpX, ty + perpY), 0);
                     }
                 } else {
-                    // 低/中威胁：靠近卡射程
                     float desired = range * 0.8f;
                     moveTo(new Vec2(tx, ty), desired);
                 }
@@ -88,15 +86,14 @@ public class EnhancedGroundAI extends GroundAI {
         }
     }
 
-    // ===== 核心修复：Teamc 没有 dead，分别判断 =====
-    private boolean isTargetDead(mindustry.entities.Entityc t) {
+    // 正确写法：用 mindustry.gen.Teamc
+    private boolean isTargetDead(Teamc t) {
         if (t == null) return true;
         if (t instanceof Unit) return ((Unit) t).dead();
         if (t instanceof Building) return ((Building) t).dead;
         return true;
     }
 
-    // 威胁度：目标点周边有电炮塔的占地大小之和
     private float threatAt(float tx, float ty) {
         float r2 = THREAT_RADIUS * THREAT_RADIUS;
         float sum = 0f;
@@ -116,7 +113,6 @@ public class EnhancedGroundAI extends GroundAI {
         return sum;
     }
 
-    // 目标选取：优先发电机/工厂
     private Building findBestTarget() {
         Building best = null;
         float bestDist = Float.MAX_VALUE;
