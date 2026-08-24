@@ -55,21 +55,17 @@ public class PulsarModMain extends Mod {
         @Override
         public void update(Unit unit) {
             unit.health = health;
-
             Team sourceTeam = unit.team;
             for (Unit u : Groups.unit) {
                 if (u == null || u.dead) continue;
                 if (u.team == sourceTeam) continue;
-
                 float dst = Mathf.dst(unit.x, unit.y, u.x, u.y);
-
                 if (dst < gravityRange) {
                     float angle = Angles.angle(unit.x, unit.y, u.x, u.y);
                     u.x -= Angles.trnsx(angle, gravityStrength);
                     u.y -= Angles.trnsy(angle, gravityStrength);
                     u.damage(suckDamage * Time.delta);
                 }
-
                 float dynamicKillRange = unit.hitSize + u.hitSize + 5f;
                 if (dst <= dynamicKillRange) {
                     if (DEBUG) Log.info("[PulsarMod] 黄矮星吞噬 " + u.type);
@@ -82,34 +78,27 @@ public class PulsarModMain extends Mod {
         public void draw(Unit unit) {
             Draw.reset();
             Draw.z(30f);
-
             float x = unit.x, y = unit.y, time = Time.time;
             float pulse = Mathf.sin(time, pulseSpeed, 1f);
             float radius = baseRadius + pulse * 3f;
-
             float waveProgress = (time % 40f) / 40f;
             Draw.z(100f);
             Draw.color(coreColor, (1f - waveProgress) * 0.4f);
             Lines.stroke(2f + pulse);
             Lines.circle(x, y, waveProgress * baseRadius * 3.5f);
-
             Draw.z(110f);
             Draw.color(outerColor, 0.25f + pulse * 0.1f);
             Fill.circle(x, y, radius * 1.6f);
-
             Draw.color(coreColor);
             Fill.circle(x, y, radius * 0.7f);
-
             Draw.color(Color.white, 0.8f);
             Fill.circle(x, y, radius * 0.35f);
-
             for (int i = 0; i < 3; i++) {
                 float angle = time * (25f + i * 10f) + (i * 120f);
                 float dist = radius * 0.5f;
                 Draw.color(Color.white, coreColor, 0.5f + Mathf.sin(time + i * 60f, 10f, 0.5f));
                 Fill.circle(x + Angles.trnsx(angle, dist), y + Angles.trnsy(angle, dist), 2.5f + pulse * 1.2f);
             }
-
             Mathf.rand.setSeed(unit.id);
             for (int i = 0; i < 4; i++) {
                 float sa = Mathf.rand.random(360f), sd = Mathf.rand.random(radius * 0.8f, radius * 2.2f);
@@ -117,7 +106,6 @@ public class PulsarModMain extends Mod {
                 Fill.circle(x + Angles.trnsx(sa, sd), y + Angles.trnsy(sa, sd), Mathf.rand.random(1f, 2.5f));
             }
             Mathf.rand.setSeed(0);
-
             Draw.reset();
             Draw.z(0f);
         }
@@ -154,34 +142,24 @@ public class PulsarModMain extends Mod {
         @Override
         public void update(Unit unit) {
             unit.health = health;
-
             float length = unit.hitSize * jetLengthMul;
             float jetAngle = unit.rotation + Mathf.sin(Time.time, 60f, 8f);
             float damage = dps * Time.delta;
-
             for (int sign : new int[]{1, -1}) {
                 float ex = unit.x + Angles.trnsx(jetAngle, length * sign);
                 float ey = unit.y + Angles.trnsy(jetAngle, length * sign);
                 applyDamageAlongLine(unit, unit.x, unit.y, ex, ey, unit.hitSize * 0.8f, damage);
             }
-
             Team sourceTeam = unit.team;
             for (Unit u : Groups.unit) {
                 if (u == null || u.dead) continue;
                 if (u.team == sourceTeam) continue;
-
                 float dst = Mathf.dst(unit.x, unit.y, u.x, u.y);
-
                 if (dst < gravityRange) {
                     float angle = Angles.angle(unit.x, unit.y, u.x, u.y);
                     u.x -= Angles.trnsx(angle, gravityStrength);
                     u.y -= Angles.trnsy(angle, gravityStrength);
-
-                    if (DEBUG) {
-                        Log.info("[PulsarMod] 吸引 " + u.type + " dst=" + (int) dst);
-                    }
                 }
-
                 float dynamicKillRange = unit.hitSize + u.hitSize + 5f;
                 if (dst <= dynamicKillRange) {
                     if (DEBUG) Log.info("[PulsarMod] 吞噬 " + u.type);
@@ -194,40 +172,31 @@ public class PulsarModMain extends Mod {
         public void draw(Unit unit) {
             Draw.reset();
             Draw.z(30f);
-
             float x = unit.x, y = unit.y, time = Time.time;
             float pulse = Mathf.sin(time, pulseSpeed, 1f);
             float radius = baseRadius + pulse * 2f;
-
             float jetLength = radius * jetLengthMul;
             float jetAngle = unit.rotation + Mathf.sin(time, 60f, 8f);
-
             drawFlowingJet(x, y, jetAngle, jetLength, time, unit.id);
             drawFlowingJet(x, y, jetAngle + 180f, jetLength * 0.9f, time, unit.id + 1000);
-
             Draw.z(100f);
             float waveProgress = (time % 35f) / 35f;
             Draw.color(coreColor, (1f - waveProgress) * 0.5f);
             Lines.stroke(2f + pulse * 1.5f);
             Lines.circle(x, y, waveProgress * baseRadius * 4f);
-
             Draw.z(110f);
             Draw.color(outerColor, 0.3f + pulse * 0.15f);
             Fill.circle(x, y, radius * 1.8f);
-
             Draw.color(coreColor);
             Fill.circle(x, y, radius * 0.75f);
-
             Draw.color(Color.white, 0.85f);
             Fill.circle(x, y, radius * 0.3f);
-
             for (int i = 0; i < 6; i++) {
                 float angle = time * (30f + i * 5f) + (i * 60f);
                 float dist = radius * 0.55f;
                 Draw.color(Color.white, coreColor, 0.5f + Mathf.sin(time + i * 45f, 8f, 0.5f));
                 Fill.circle(x + Angles.trnsx(angle, dist), y + Angles.trnsy(angle, dist), 2f + pulse * 1.5f);
             }
-
             Draw.reset();
             Draw.z(0f);
         }
@@ -235,34 +204,26 @@ public class PulsarModMain extends Mod {
         private void drawFlowingJet(float x, float y, float angle, float length, float time, long seed) {
             float spacing = length / particleCount;
             float travel = time * particleSpeed;
-
             Mathf.rand.setSeed(seed);
             for (int i = 0; i < particleCount; i++) {
                 float dist = (travel + i * spacing) % length;
                 float t = dist / length;
-
                 float spread = t * 5f;
                 float offset = Mathf.rand.random(-spread, spread);
                 float finalAngle = angle + offset;
-
                 float px = x + Angles.trnsx(finalAngle, dist);
                 float py = y + Angles.trnsy(finalAngle, dist);
-
                 Color c;
                 if (t < 0.25f) c = Color.white.lerp(jetColor, t / 0.25f);
                 else if (t < 0.7f) c = jetColor;
                 else c = jetColor.lerp(outerColor, (t - 0.7f) / 0.3f);
-
                 float flicker = (Mathf.sin(dist * 0.1f - time * 0.3f) + 1f) / 2f;
                 float alpha = (1f - t * 0.85f) * (0.5f + flicker * 0.5f);
-
                 float size = (1.0f - t * 0.8f) * 1.0f;
                 size = size > 0.15f ? size : 0.15f;
                 size *= Mathf.rand.random(0.6f, 1.0f);
-
                 Draw.color(c, alpha);
                 Fill.circle(px, py, size);
-
                 if (Mathf.rand.chance(0.06f)) {
                     float sprayAngle = finalAngle + Mathf.rand.range(15f);
                     float sprayDist = dist + Mathf.rand.random(3f, 10f);
@@ -276,17 +237,17 @@ public class PulsarModMain extends Mod {
         }
     }
 
-    // ==================== 黑洞（双向狂暴射线 + 纯黑核心 + 小椭圆黄蓝吸积盘） ====================
+    // ==================== 黑洞（只留三样：黑核心 + 椭圆黄蓝盘 + 双向狂暴射线） ====================
     public static class BlackHoleUnitType extends UnitType {
         public float baseRadius = 12f;
         public float pulseSpeed = 25f;
 
-        // 引力（最强）
+        // 引力
         public float gravityRange = 250f;
         public float gravityStrength = 5.0f;
         public float suckDamage = 3000000f;
 
-        // 狂暴粒子射线（双向，比中子星更猛）
+        // 狂暴粒子射线
         public int particleCount = 320;
         public float particleSpeed = 22f;
         public float jetLengthMul = 55f;
@@ -299,9 +260,10 @@ public class PulsarModMain extends Mod {
         public float diskSpeed = 6.0f;
 
         // 颜色
-        public Color diskColorInner = Color.valueOf("fff200");
-        public Color diskColorMid = Color.valueOf("ffae00");
-        public Color diskColorOuter = Color.valueOf("00b3ff");
+        public Color diskColorInner = Color.valueOf("fff200");  // 亮黄
+        public Color diskColorMid = Color.valueOf("ffae00");    // 橙黄
+        public Color diskColorOuter = Color.valueOf("00b3ff");  // 蓝
+        public Color jetColor = Color.valueOf("00e5ff");       // 亮蓝
 
         public BlackHoleUnitType(String name) {
             super(name);
@@ -323,7 +285,7 @@ public class PulsarModMain extends Mod {
             float jetAngle = unit.rotation + Mathf.sin(Time.time, 40f, 12f);
             float damage = dps * Time.delta;
 
-            // ✅ 双向狂暴粒子射线伤害（和中子星一样双向，但更粗更猛）
+            // 双向狂暴射线伤害
             for (int sign : new int[]{1, -1}) {
                 float a = jetAngle + (sign > 0 ? 0 : 180);
                 float ex = unit.x + Angles.trnsx(a, length);
@@ -357,8 +319,6 @@ public class PulsarModMain extends Mod {
         @Override
         public void draw(Unit unit) {
             Draw.reset();
-            Draw.z(30f);
-
             float x = unit.x, y = unit.y, time = Time.time;
             float pulse = Mathf.sin(time, pulseSpeed, 1f);
             float radius = baseRadius + pulse * 1.5f;
@@ -366,88 +326,72 @@ public class PulsarModMain extends Mod {
             float jetLength = radius * jetLengthMul;
             float jetAngle = unit.rotation + Mathf.sin(time, 40f, 12f);
 
-            // 1. 双向狂暴粒子射线
-            Draw.z(80f);
+            // 1. 双向狂暴粒子射线（底层）
+            Draw.z(85f);
             drawViolentJets(x, y, jetAngle, jetLength, time, unit.id);
+            drawViolentJets(x, y, jetAngle + 180f, jetLength * 0.9f, time, unit.id + 1000);
 
-            // 2. 小椭圆吸积盘（亮黄→蓝）
+            // 2. 小椭圆吸积盘（中层，在核心下面）
             Draw.z(95f);
             drawEllipticalDisk(x, y, time);
 
-            // 3. 事件视界外圈光晕
-            Draw.z(100f);
-            Draw.color(Color.valueOf("5b2bff"), 0.25f);
-            Fill.circle(x, y, radius * 1.6f);
-            Draw.color(Color.valueOf("5b2bff"), 0.15f);
-            Fill.circle(x, y, radius * 2.2f);
-
-            // 4. 事件视界边缘亮环
-            Draw.z(105f);
-            Draw.color(Color.valueOf("ffd24a"), 0.9f);
-            Lines.stroke(2.0f + pulse * 0.5f);
-            Lines.circle(x, y, radius * 1.05f);
-
-            // 5. 纯黑核心
+            // 3. 纯黑核心（顶层，遮挡吸积盘中心）
             Draw.z(110f);
             Draw.color(Color.black);
             Fill.circle(x, y, radius * 0.95f);
 
-            // 6. 奇点微光
-            Draw.color(Color.valueOf("fff200"), 0.8f);
-            Fill.circle(x, y, radius * 0.12f);
+            // 极小的奇点高光
+            Draw.color(Color.valueOf("fff200"), 0.6f);
+            Fill.circle(x, y, radius * 0.1f);
 
             Draw.reset();
             Draw.z(0f);
         }
 
-        // ✅ 双向狂暴射线（只画两条）
-        private void drawViolentJets(float x, float y, float baseAngle, float length, float time, long seed) {
+        // 狂暴粒子射线
+        private void drawViolentJets(float x, float y, float angle, float length, float time, long seed) {
+            float spacing = length / particleCount;
+            float travel = time * particleSpeed;
+
             Mathf.rand.setSeed(seed);
+            for (int i = 0; i < particleCount / 2; i++) {
+                float dist = (travel + i * spacing * 2) % length;
+                float t = dist / length;
 
-            for (int sign : new int[]{1, -1}) {
-                float angle = baseAngle + (sign > 0 ? 0 : 180);
-                float spacing = length / particleCount;
-                float travel = time * particleSpeed;
+                float spread = t * 7f;
+                float offset = Mathf.rand.random(-spread, spread);
+                float finalAngle = angle + offset;
 
-                for (int i = 0; i < particleCount / 2; i++) {
-                    float dist = (travel + i * spacing * 2) % length;
-                    float t = dist / length;
+                float px = x + Angles.trnsx(finalAngle, dist);
+                float py = y + Angles.trnsy(finalAngle, dist);
 
-                    float spread = t * 7f;
-                    float offset = Mathf.rand.random(-spread, spread);
-                    float finalAngle = angle + offset;
+                Color c;
+                if (t < 0.2f) c = Color.white.lerp(jetColor, t / 0.2f);
+                else if (t < 0.6f) c = jetColor;
+                else c = jetColor.lerp(Color.valueOf("0044aa"), (t - 0.6f) / 0.4f);
 
-                    float px = x + Angles.trnsx(finalAngle, dist);
-                    float py = y + Angles.trnsy(finalAngle, dist);
+                float flicker = (Mathf.sin(dist * 0.15f - time * 0.5f) + 1f) / 2f;
+                float alpha = (1f - t * 0.8f) * (0.6f + flicker * 0.4f);
 
-                    Color c;
-                    if (t < 0.2f) c = Color.white.lerp(Color.valueOf("7bffff"), t / 0.2f);
-                    else if (t < 0.6f) c = Color.valueOf("00e5ff");
-                    else c = Color.valueOf("00e5ff").lerp(Color.valueOf("0044aa"), (t - 0.6f) / 0.4f);
+                float size = (1.8f - t * 1.4f) * Mathf.rand.random(0.7f, 1.3f);
+                size = size > 0.2f ? size : 0.2f;
 
-                    float flicker = (Mathf.sin(dist * 0.15f - time * 0.5f) + 1f) / 2f;
-                    float alpha = (1f - t * 0.8f) * (0.6f + flicker * 0.4f);
+                Draw.color(c, alpha);
+                Fill.circle(px, py, size);
 
-                    float size = (1.8f - t * 1.4f) * Mathf.rand.random(0.7f, 1.3f);
-                    size = size > 0.2f ? size : 0.2f;
-
-                    Draw.color(c, alpha);
-                    Fill.circle(px, py, size);
-
-                    if (Mathf.rand.chance(0.12f)) {
-                        float sprayAngle = finalAngle + Mathf.rand.range(20f);
-                        float sprayDist = dist + Mathf.rand.random(5f, 15f);
-                        float spx = x + Angles.trnsx(sprayAngle, sprayDist);
-                        float spy = y + Angles.trnsy(sprayAngle, sprayDist);
-                        Draw.color(c, alpha * 0.5f);
-                        Fill.circle(spx, spy, size * 0.6f);
-                    }
+                if (Mathf.rand.chance(0.12f)) {
+                    float sprayAngle = finalAngle + Mathf.rand.range(20f);
+                    float sprayDist = dist + Mathf.rand.random(5f, 15f);
+                    float spx = x + Angles.trnsx(sprayAngle, sprayDist);
+                    float spy = y + Angles.trnsy(sprayAngle, sprayDist);
+                    Draw.color(c, alpha * 0.5f);
+                    Fill.circle(spx, spy, size * 0.6f);
                 }
             }
             Mathf.rand.setSeed(0);
         }
 
-        // 小椭圆吸积盘
+        // 小椭圆吸积盘（黄→蓝渐变）
         private void drawEllipticalDisk(float x, float y, float time) {
             Mathf.rand.setSeed(777);
             for (int i = 0; i < diskParticles; i++) {
