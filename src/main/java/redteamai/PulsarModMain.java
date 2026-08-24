@@ -7,8 +7,9 @@ public class PulsarModMain extends Mod {
 
     @Override
     public void loadContent() {
-        Log.info("[PulsarMod] 加载脉冲星单位...");
-        new PulsarUnitType("pulsar-unit").load();
-        Log.info("[PulsarMod] 脉冲星单位注册完成");
+        Log.info("[PulsarMod] 加载恒星单位...");
+        new YellowDwarfUnitType("yellow-dwarf").load();
+        new BluePulsarUnitType("blue-pulsar").load();
+        Log.info("[PulsarMod] 所有单位注册完成");
     }
 }
