@@ -25,17 +25,17 @@ public class PulsarModMain extends Mod {
         Log.info("[PulsarMod] 加载恒星单位...");
         new YellowDwarfUnitType("yellow-dwarf").load();
         new BluePulsarUnitType("blue-pulsar").load();
+        new BlackHoleUnitType("black-hole").load();   // ✅ 黑洞
         Log.info("[PulsarMod] 所有单位注册完成");
     }
 
-    // ==================== 黄矮星（加了弱引力 + 吸入伤害） ====================
+    // ==================== 黄矮星（弱引力 + 吸入伤害） ====================
     public static class YellowDwarfUnitType extends UnitType {
         public Color coreColor = Color.valueOf("ffd37f");
         public Color outerColor = Color.valueOf("ff9d00");
         public float pulseSpeed = 40f;
         public float baseRadius = 22f;
 
-        // ✅ 新增引力参数
         public float gravityRange = 150f;
         public float gravityStrength = 1.0f;
         public float suckDamage = 1000000f;
@@ -54,9 +54,8 @@ public class PulsarModMain extends Mod {
 
         @Override
         public void update(Unit unit) {
-            unit.health = health;   // 每帧回满
+            unit.health = health;
 
-            // ✅ 引力 + 吸入伤害 + 代码杀
             Team sourceTeam = unit.team;
             for (Unit u : Groups.unit) {
                 if (u == null || u.dead) continue;
@@ -65,16 +64,12 @@ public class PulsarModMain extends Mod {
                 float dst = Mathf.dst(unit.x, unit.y, u.x, u.y);
 
                 if (dst < gravityRange) {
-                    // 弱引力吸入
                     float angle = Angles.angle(unit.x, unit.y, u.x, u.y);
                     u.x -= Angles.trnsx(angle, gravityStrength);
                     u.y -= Angles.trnsy(angle, gravityStrength);
-
-                    // 吸入时每秒100万伤害
                     u.damage(suckDamage * Time.delta);
                 }
 
-                // 碰到核心代码杀
                 float dynamicKillRange = unit.hitSize + u.hitSize + 5f;
                 if (dst <= dynamicKillRange) {
                     if (DEBUG) Log.info("[PulsarMod] 黄矮星吞噬 " + u.type);
@@ -128,7 +123,7 @@ public class PulsarModMain extends Mod {
         }
     }
 
-    // ==================== 中子星（完全原样，一字未改） ====================
+    // ==================== 中子星（亮蓝粒子喷流，完全原样） ====================
     public static class BluePulsarUnitType extends UnitType {
         public Color coreColor = Color.valueOf("00e5ff");
         public Color outerColor = Color.valueOf("0099cc");
@@ -281,6 +276,160 @@ public class PulsarModMain extends Mod {
         }
     }
 
+    // ==================== 黑洞（扭曲光线 + 引力透镜） ====================
+    public static class BlackHoleUnitType extends UnitType {
+        public float baseRadius = 14f;
+        public float pulseSpeed = 30f;
+
+        public float gravityRange = 220f;
+        public float gravityStrength = 2.5f;
+        public float suckDamage = 2000000f;
+
+        public int diskParticles = 180;
+        public float diskSpeed = 3.0f;
+
+        public BlackHoleUnitType(String name) {
+            super(name);
+            health = Integer.MAX_VALUE;
+            speed = 0f;
+            rotateSpeed = 0f;
+            hitSize = baseRadius * 2f;
+            constructor = UnitEntity::create;
+            weapons = new Seq<>();
+            outlineColor = Color.valueOf("00000000");
+            localizedName = "黑洞";
+        }
+
+        @Override
+        public void update(Unit unit) {
+            unit.health = health;
+
+            Team sourceTeam = unit.team;
+            for (Unit u : Groups.unit) {
+                if (u == null || u.dead) continue;
+                if (u.team == sourceTeam) continue;
+
+                float dst = Mathf.dst(unit.x, unit.y, u.x, u.y);
+
+                if (dst < gravityRange) {
+                    float angle = Angles.angle(unit.x, unit.y, u.x, u.y);
+                    u.x -= Angles.trnsx(angle, gravityStrength);
+                    u.y -= Angles.trnsy(angle, gravityStrength);
+                    u.damage(suckDamage * Time.delta);
+                }
+
+                float dynamicKillRange = unit.hitSize + u.hitSize + 5f;
+                if (dst <= dynamicKillRange) {
+                    if (DEBUG) Log.info("[PulsarMod] 黑洞吞噬 " + u.type);
+                    u.kill();
+                }
+            }
+        }
+
+        @Override
+        public void draw(Unit unit) {
+            Draw.reset();
+            Draw.z(30f);
+
+            float x = unit.x, y = unit.y, time = Time.time;
+            float pulse = Mathf.sin(time, pulseSpeed, 1f);
+            float radius = baseRadius + pulse * 1.5f;
+
+            // 1. 引力透镜弧（扭曲光线）
+            Draw.z(85f);
+            drawGravitationalLensing(x, y, radius, time);
+
+            // 2. 螺旋吸积盘
+            Draw.z(90f);
+            drawAccretionDisk(x, y, radius, time);
+
+            // 3. 外发光晕
+            Draw.z(100f);
+            for (int i = 4; i >= 1; i--) {
+                float r = radius * (2.0f + i * 0.5f);
+                Draw.color(Color.valueOf("7b4bff"), 0.08f / i);
+                Fill.circle(x, y, r);
+            }
+
+            // 4. 事件视界亮环
+            Draw.z(105f);
+            Draw.color(Color.valueOf("aa88ff"), 0.9f);
+            Lines.stroke(2.5f + pulse * 0.5f);
+            Lines.circle(x, y, radius * 1.15f);
+
+            // 5. 纯黑核心
+            Draw.z(110f);
+            Draw.color(Color.black);
+            Fill.circle(x, y, radius * 0.95f);
+
+            // 6. 奇点高光
+            Draw.color(Color.white, 0.6f);
+            Fill.circle(x, y, radius * 0.15f);
+
+            Draw.reset();
+            Draw.z(0f);
+        }
+
+        private void drawGravitationalLensing(float x, float y, float radius, float time) {
+            int arcs = 5;
+            float baseR = radius * 3.2f;
+
+            for (int a = 0; a < arcs; a++) {
+                float arcPhase = time * 0.4f + a * (360f / arcs);
+                float eccentricity = 1f + 0.35f * Mathf.sin(time * 0.3f + a * 1.7f);
+
+                Draw.color(Color.valueOf("9d7bff"), 0.35f + 0.15f * Mathf.sin(time + a));
+                Lines.stroke(1.5f);
+
+                int segments = 30;
+                float arcSpan = 140f;
+                float prevSx = 0, prevSy = 0;
+                for (int s = 0; s <= segments; s++) {
+                    float ang = arcPhase + (s / (float) segments) * arcSpan;
+                    float r = baseR * (1f - 0.25f * Mathf.cos(ang * Mathf.degRad));
+                    r *= eccentricity;
+                    float sx = x + Angles.trnsx(ang, r);
+                    float sy = y + Angles.trnsy(ang, r);
+                    if (s > 0) {
+                        Lines.line(prevSx, prevSy, sx, sy);
+                    }
+                    prevSx = sx;
+                    prevSy = sy;
+                }
+            }
+            Lines.stroke(1f);
+        }
+
+        private void drawAccretionDisk(float x, float y, float radius, float time) {
+            float diskRadius = radius * 4.5f;
+            Mathf.rand.setSeed(12345);
+
+            for (int i = 0; i < diskParticles; i++) {
+                float t = Mathf.rand.random(0.3f, 1f);
+                float angle = time * diskSpeed * (1f + (1f - t) * 2f) + t * 360f * 3f;
+                float r = radius * 1.3f + t * (diskRadius - radius);
+
+                float warp = Mathf.sin(time * 2f + t * 6f + i) * (1f - t) * 6f;
+                float px = x + Angles.trnsx(angle, r);
+                float py = y + Angles.trnsy(angle, r) + warp;
+
+                Color c;
+                if (t < 0.4f) c = Color.white.lerp(Color.valueOf("7b9bff"), t / 0.4f);
+                else c = Color.valueOf("7b9bff").lerp(Color.valueOf("3b1b8f"), (t - 0.4f) / 0.6f);
+
+                float flicker = (Mathf.sin(time * 5f + i * 0.7f) + 1f) / 2f;
+                float alpha = (0.4f + flicker * 0.6f) * (1f - t * 0.5f);
+                float size = (2.5f - t * 2f) + Mathf.sin(time * 4f + i) * 0.5f;
+                size = size > 0.4f ? size : 0.4f;
+
+                Draw.color(c, alpha);
+                Fill.circle(px, py, size);
+            }
+            Mathf.rand.setSeed(0);
+        }
+    }
+
+    // ===== 共用伤害辅助 =====
     private static int applyDamageAlongLine(Unit source, float x1, float y1, float x2, float y2, float width, float damage) {
         int hit = 0;
         Team sourceTeam = source.team;
