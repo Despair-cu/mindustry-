@@ -14,30 +14,25 @@ import java.util.Map;
 
 public class RedTeamAIMod extends Mod {
 
-    // 网格大小（像素），用于死亡热点统计
     private static final int GRID = 32;
-
-    // 网格坐标 -> 友军死亡次数（威胁度）
     public static final Map<Long, Integer> deathHeat = new HashMap<>();
-
-    // 已接管计数
     private int totalBound = 0;
 
     @Override
     public void init() {
         Log.info("[RedTeamAI] === Mod init ===");
 
-        // 世界加载：重置 + 初始接管
+        // 世界加载：重置威胁地图 + 初始接管
         Events.run(WorldLoadEvent.class, () -> {
             deathHeat.clear();
             int n = takeOverAll();
             totalBound += n;
-            Log.info("[RedTeamAI] 初始接管 " + n + " 个，累计 " + totalBound);
+            Log.info("[RedTeamAI] 初始接管 " + n + " 个");
         });
 
-        // 监听友军死亡 -> 记录热点
-        Events.run(UnitDestroyEvent.class, () -> {
-            Unit u = Events.get(UnitDestroyEvent.class).unit;
+        // 监听友军死亡 -> 记录热点（用 lambda 参数直接接收事件）
+        Events.on(UnitDestroyEvent.class, event -> {
+            Unit u = event.unit;
             if (u == null || u.team != Team.crux) return;
             long key = gridKey(u.x, u.y);
             deathHeat.merge(key, 1, Integer::sum);
@@ -51,7 +46,10 @@ public class RedTeamAIMod extends Mod {
                 tick++;
                 if (tick % 30 == 0) {
                     int n = takeOverAll();
-                    if (n > 0) { totalBound += n; Log.info("[RedTeamAI] 轮询接管 " + n + " 个"); }
+                    if (n > 0) {
+                        totalBound += n;
+                        Log.info("[RedTeamAI] 轮询接管 " + n + " 个");
+                    }
                 }
             }
         });
@@ -59,21 +57,19 @@ public class RedTeamAIMod extends Mod {
         Log.info("[RedTeamAI] === 监听器注册完成 ===");
     }
 
-    /** 把世界坐标转成网格 key */
     static long gridKey(float x, float y) {
-        int gx = (int) (x / GRID);
-        int gy = (int) (int) (y / GRID);
-        return ((long) gx << 32) | (gy & 0xFFFFFFFFL);
+        int gx = (int)(x / GRID);
+        int gy = (int)(y / GRID);
+        return ((long)gx << 32) | (gy & 0xFFFFFFFFL);
     }
 
-    /** 查询某点(及周边)的威胁度(死亡热点加权) */
     static int threatAtPoint(float x, float y) {
-        int gx = (int) (x / GRID);
-        int gy = (int) (y / GRID);
+        int gx = (int)(x / GRID);
+        int gy = (int)(y / GRID);
         int sum = 0;
         for (int dx = -1; dx <= 1; dx++) {
             for (int dy = -1; dy <= 1; dy++) {
-                long key = (((long) (gx + dx)) << 32) | ((gy + dy) & 0xFFFFFFFFL);
+                long key = ((long)(gx + dx) << 32) | ((gy + dy) & 0xFFFFFFFFL);
                 Integer v = deathHeat.get(key);
                 if (v != null) sum += v;
             }
@@ -81,14 +77,12 @@ public class RedTeamAIMod extends Mod {
         return sum;
     }
 
-    /** 全场总威胁度 */
     static int totalThreat() {
         int s = 0;
         for (Integer v : deathHeat.values()) s += v;
         return s;
     }
 
-    /** 红队当前地面单位数 */
     static int cruxGroundCount() {
         int c = 0;
         for (Unit u : mindustry.Vars.state.teams.get(Team.crux).units) {
@@ -108,12 +102,17 @@ public class RedTeamAIMod extends Mod {
                 if (u.controller() instanceof EnhancedGroundAI) continue;
                 try {
                     EnhancedGroundAI ai = new EnhancedGroundAI();
-                    ai.unit(u); ai.init();
+                    ai.unit(u);
+                    ai.init();
                     u.controller(ai);
                     bound++;
-                } catch (Exception ex) { Log.err("[RedTeamAI] 接管失败: " + ex.getMessage()); }
+                } catch (Exception ex) {
+                    Log.err("[RedTeamAI] 接管失败: " + ex.getMessage());
+                }
             }
-        } catch (Exception ex) { Log.err("[RedTeamAI] takeOverAll: " + ex.getMessage()); }
+        } catch (Exception ex) {
+            Log.err("[RedTeamAI] takeOverAll: " + ex.getMessage());
+        }
         return bound;
     }
 }
