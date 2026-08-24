@@ -23,7 +23,7 @@ public class EnhancedGroundAI extends GroundAI {
         try {
             if (unit == null || unit.dead()) return;
 
-            // 用 isTargetDead 判断，不再直接调用 target.dead
+            // 刷新/选取目标
             if (target == null || isTargetDead(target)) {
                 target = findBestTarget();
             }
@@ -36,7 +36,7 @@ public class EnhancedGroundAI extends GroundAI {
             float range = unit.range();
             float retreatAt = range - (RETREAT_DIST * TILE_SIZE);
 
-            // 敌进我退
+            // 敌进我退：目标进入射程-2格就后退
             if (dist < retreatAt) {
                 float dx = unit.x - tx;
                 float dy = unit.y - ty;
@@ -49,13 +49,15 @@ public class EnhancedGroundAI extends GroundAI {
                 unit.lookAt(tx, ty);
                 updateWeapons();
                 updateVisuals();
+                updateMovement(); // ★ 实际执行移动（含寻路绕墙）
                 return;
             }
 
+            // 根据目标类型决定移动方式
             boolean isUnitTarget = (target instanceof Unit);
 
             if (isUnitTarget) {
-                // 敌方单位：保持拉扯
+                // 敌方单位：保持拉扯，不站桩
                 float desired = retreatAt * 0.85f;
                 moveTo(new Vec2(tx, ty), desired);
             } else {
@@ -63,6 +65,7 @@ public class EnhancedGroundAI extends GroundAI {
                 float threat = threatAt(tx, ty);
 
                 if (threat >= HIGH_THREAT) {
+                    // 高威胁：绕道
                     float dx = tx - unit.x;
                     float dy = ty - unit.y;
                     float len = (float) Math.sqrt(dx * dx + dy * dy);
@@ -72,6 +75,7 @@ public class EnhancedGroundAI extends GroundAI {
                         moveTo(new Vec2(tx + perpX, ty + perpY), 0);
                     }
                 } else {
+                    // 低/中威胁：靠近卡射程
                     float desired = range * 0.8f;
                     moveTo(new Vec2(tx, ty), desired);
                 }
@@ -80,13 +84,14 @@ public class EnhancedGroundAI extends GroundAI {
             unit.lookAt(tx, ty);
             updateWeapons();
             updateVisuals();
+            updateMovement(); // ★ 关键：让寻路系统实际执行移动，自动绕开地图墙
 
         } catch (Exception ex) {
             // silent
         }
     }
 
-    // 正确写法：用 mindustry.gen.Teamc
+    // 判断目标是否死亡（Teamc 没有 dead，分别判断）
     private boolean isTargetDead(Teamc t) {
         if (t == null) return true;
         if (t instanceof Unit) return ((Unit) t).dead();
