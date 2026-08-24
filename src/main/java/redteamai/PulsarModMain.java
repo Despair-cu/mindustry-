@@ -1,18 +1,14 @@
-package com.example.pulsarmod;
+package redteamai;
 
-import mindustry.mod.Mod;
-import mindustry.game.EventType;
 import arc.util.Log;
+import mindustry.mod.Mod;
 
 public class PulsarModMain extends Mod {
-    public PulsarModMain() {
-        Log.info("PulsarMod initialized.");
-    }
 
     @Override
     public void loadContent() {
-        // 注册我们的脉冲星单位
+        Log.info("[PulsarMod] 加载脉冲星单位...");
         new PulsarUnitType("pulsar-unit").load();
-        Log.info("PulsarUnit registered.");
+        Log.info("[PulsarMod] 脉冲星单位注册完成");
     }
 }
