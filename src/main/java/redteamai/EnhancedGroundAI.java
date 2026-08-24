@@ -1,7 +1,6 @@
 package redteamai;
 
 import arc.math.geom.Vec2;
-import arc.util.Log;
 import mindustry.ai.types.GroundAI;
 import mindustry.gen.Building;
 import mindustry.gen.Groups;
@@ -21,10 +20,10 @@ public class EnhancedGroundAI extends GroundAI {
     @Override
     public void updateUnit() {
         try {
-            if (unit == null || unit.dead) return;
+            if (unit == null || unit.dead()) return;
 
-            // 刷新/选取目标
-            if (target == null || target.dead) {
+            // 刷新/选取目标（用 isTargetDead 代替 target.dead）
+            if (target == null || isTargetDead(target)) {
                 target = findBestTarget();
             }
             updateTargeting();
@@ -42,8 +41,8 @@ public class EnhancedGroundAI extends GroundAI {
                 float dy = unit.y - ty;
                 float len = (float) Math.sqrt(dx * dx + dy * dy);
                 if (len > 0.01f) {
-                    float backX = (float) (unit.x + (dx / len) * 50.0);
-                    float backY = (float) (unit.y + (dy / len) * 50.0);
+                    float backX = unit.x + (dx / len) * 50f;
+                    float backY = unit.y + (dy / len) * 50f;
                     moveTo(new Vec2(backX, backY), 0);
                 }
                 unit.lookAt(tx, ty);
@@ -85,8 +84,16 @@ public class EnhancedGroundAI extends GroundAI {
             updateVisuals();
 
         } catch (Exception ex) {
-            Log.err("[RedTeamAI] updateUnit异常: " + ex.getMessage());
+            // silent
         }
+    }
+
+    // ===== 核心修复：Teamc 没有 dead，分别判断 =====
+    private boolean isTargetDead(mindustry.entities.Entityc t) {
+        if (t == null) return true;
+        if (t instanceof Unit) return ((Unit) t).dead();
+        if (t instanceof Building) return ((Building) t).dead;
+        return true;
     }
 
     // 威胁度：目标点周边有电炮塔的占地大小之和
@@ -98,8 +105,6 @@ public class EnhancedGroundAI extends GroundAI {
             if (b == null || b.dead) continue;
             if (b.team == unit.team || b.team == mindustry.game.Team.derelict) continue;
             if (!(b.block instanceof Turret)) continue;
-
-            // 没电的炮塔不算威胁
             if (b.power != null && b.power.status < 0.1f) continue;
 
             float dx = b.x - tx, dy = b.y - ty;
