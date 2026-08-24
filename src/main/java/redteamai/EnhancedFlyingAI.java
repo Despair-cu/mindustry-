@@ -8,15 +8,12 @@ import mindustry.gen.Building;
 import mindustry.gen.Groups;
 import mindustry.gen.Teamc;
 import mindustry.gen.Unit;
-import mindustry.world.blocks.defense.turrets.Turret;
-import mindustry.world.blocks.power.PowerGenerator;
-import mindustry.world.blocks.units.UnitFactory;
+import mindustry.world.blocks.defense.turret.Turret;
 
 public class EnhancedFlyingAI extends FlyingAI {
     private static final float RETREAT_DIST = 2f;
-    private static final float DETECT_RANGE = 130f;
-    private static final float DETECT_WIDTH = 55f;
-    private static final float EVADE_DIST = 85f;
+    private static final float DETECT_RANGE = 160f; // 前方探测距离
+    private static final float SAFE_MARGIN = 30f;    // 在炮塔射程外再留 30px 余量
     private int frameCount = 0;
 
     @Override
@@ -24,6 +21,7 @@ public class EnhancedFlyingAI extends FlyingAI {
         try {
             if (unit == null || unit.dead()) return;
             frameCount++;
+
             if (target == null || isTargetDead(target)) target = findBestTarget();
             updateTargeting();
             if (target == null) { super.updateUnit(); return; }
@@ -33,6 +31,7 @@ public class EnhancedFlyingAI extends FlyingAI {
             float range = unit.range();
             float retreatAt = range - RETREAT_DIST * 8f;
 
+            // 敌进我退
             if (dist < retreatAt) {
                 float dx = unit.x - tx, dy = unit.y - ty;
                 float len = (float)Math.sqrt(dx*dx + dy*dy);
@@ -41,43 +40,62 @@ public class EnhancedFlyingAI extends FlyingAI {
                 return;
             }
 
+            // 检测飞行路径上是否有"对空炮塔"且射程覆盖到我
             float dx = tx - unit.x, dy = ty - unit.y;
             float len = (float)Math.sqrt(dx*dx + dy*dy);
-            boolean hasTurretAhead = false;
+            Building threat = null;
+            float threatDist = Float.MAX_VALUE;
 
             if (len > 0.01f) {
                 for (Building b : Groups.build) {
                     if (b == null || b.dead) continue;
                     if (b.team == unit.team || b.team == mindustry.game.Team.derelict) continue;
                     if (!(b.block instanceof Turret)) continue;
+                    Turret turretBlock = (Turret) b.block;
+                    // 只对空炮塔（能打空中目标的）
+                    if (!turretBlock.targetAir) continue;
                     if (b.power != null && b.power.status < 0.1f) continue;
+
                     float tdx = b.x - unit.x, tdy = b.y - unit.y;
                     float proj = (tdx * dx + tdy * dy) / len;
-                    if (proj > 0 && proj < DETECT_RANGE) {
-                        float perpX = tdx - (proj * dx / len);
-                        float perpY = tdy - (proj * dy / len);
-                        float perpDist = (float)Math.sqrt(perpX*perpX + perpY*perpY);
-                        if (perpDist < DETECT_WIDTH) { hasTurretAhead = true; break; }
+                    if (proj < 0 || proj > DETECT_RANGE) continue;
+                    // 炮塔射程（含余量）
+                    float turretRange = turretBlock.range + SAFE_MARGIN;
+                    float perpX = tdx - (proj * dx / len);
+                    float perpY = tdy - (proj * dy / len);
+                    float perpDist = (float)Math.sqrt(perpX*perpX + perpY*perpY);
+                    if (perpDist < turretRange && unit.dst(b) < turretRange) {
+                        // 该炮塔射程覆盖到我且在我前方路径上
+                        if (unit.dst(b) < threatDist) { threatDist = unit.dst(b); threat = b; }
                     }
                 }
             }
 
-            if (hasTurretAhead) {
+            if (threat != null) {
+                // 有对空炮塔威胁：向侧方偏移绕开（选离目标更近的一侧）
                 float lx = -dy/len, ly = dx/len;
                 float rx = dy/len, ry = -dx/len;
-                float elX = unit.x + lx*EVADE_DIST, elY = unit.y + ly*EVADE_DIST;
-                float erX = unit.x + rx*EVADE_DIST, erY = unit.y + ry*EVADE_DIST;
+                float ev = threat.block.range + SAFE_MARGIN + 40f; // 偏移量 = 炮塔射程+余量
+                float elX = unit.x + lx*ev, elY = unit.y + ly*ev;
+                float erX = unit.x + rx*ev, erY = unit.y + ry*ev;
                 float dl = (float)Math.sqrt((elX-tx)*(elX-tx) + (elY-ty)*(elY-ty));
                 float dr = (float)Math.sqrt((erX-tx)*(erX-tx) + (erY-ty)*(erY-ty));
                 if (dl <= dr) moveSmooth(elX, elY); else moveSmooth(erX, erY);
+                if (frameCount % 60 == 0)
+                    Log.info("[RedTeamAI][空] " + unit.type.name + " 规避对空炮塔 " + threat.block.name + " 绕飞");
             } else {
+                // 无威胁：直线飞向目标
                 if (len > 0.01f) {
                     float sp = unit.speed();
                     unit.move((dx/len) * sp, (dy/len) * sp);
                 }
+                if (frameCount % 60 == 0)
+                    Log.info("[RedTeamAI][空] " + unit.type.name + " 直飞目标 dist=" + (int)dist);
             }
 
-            unit.lookAt(tx, ty); updateWeapons(); updateVisuals();
+            unit.lookAt(tx, ty);
+            updateWeapons(); updateVisuals();
+
         } catch (Exception ex) { Log.err("[RedTeamAI][空] 异常: " + ex.getMessage()); }
     }
 
@@ -95,6 +113,7 @@ public class EnhancedFlyingAI extends FlyingAI {
         return true;
     }
 
+    /** 空军目标：优先敌方核心，其次发电机/工厂 */
     private Building findBestTarget() {
         for (Building b : Groups.build) {
             if (b == null || b.dead) continue;
