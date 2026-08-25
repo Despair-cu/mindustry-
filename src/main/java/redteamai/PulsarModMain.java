@@ -16,6 +16,7 @@ import mindustry.gen.Unit;
 import mindustry.gen.UnitEntity;
 import mindustry.mod.Mod;
 import mindustry.type.UnitType;
+import mindustry.world.blocks.defense.ShieldWall;
 
 public class PulsarModMain extends Mod {
 
@@ -281,7 +282,7 @@ public class PulsarModMain extends Mod {
                 float flicker = (Mathf.sin(time * 8f + i * 0.9f) + 1f) / 2f;
                 float alpha = (0.7f + flicker * 0.3f) * (1f - t * 0.6f);
                 float size = (2.0f - t * 1.3f) + Mathf.sin(time * 6f + i) * 0.3f;
-                size = Math.max(size, 0.3f);
+                size = Mathf.max(size, 0.3f);
                 Draw.color(c, alpha); Fill.circle(px, py, size);
             }
             Mathf.rand.setSeed(0);
@@ -296,7 +297,7 @@ public class PulsarModMain extends Mod {
     }
 
     public static class ShockwaveUnitType extends UnitType {
-        private final Color coreColor = Color.valueOf("00e5ff");
+        private final Color ringColor = Color.valueOf("00e5ff");
         private final float baseRadius = 22f;
         private final float shockwaveInterval = 20f * 60f;
         private final float shockwaveMaxRadius = 10000f;
@@ -305,7 +306,8 @@ public class PulsarModMain extends Mod {
         private float shockwaveTimer = 0f;
         private float shockwaveRadius = -1f;
         private Seq<Building> hitShields = new Seq<>();
-        private float lastExplosionX, lastExplosionY, lastExplosionTime;
+        private float lastSparkX, lastSparkY, lastSparkTime;
+        private static final float SPARK_LIFETIME = 20f;
 
         public ShockwaveUnitType(String name) {
             super(name);
@@ -335,7 +337,7 @@ public class PulsarModMain extends Mod {
                     float dst = Mathf.dst(unit.x, unit.y, u.x, u.y);
                     if (dst >= prevRadius && dst <= shockwaveRadius + shockwaveThickness) {
                         if (!isBlockedByShield(unit.x, unit.y, u.x, u.y)) {
-                            spawnExplosion(u.x, u.y);
+                            lastSparkX = u.x; lastSparkY = u.y; lastSparkTime = Time.time;
                             u.remove();
                         }
                     }
@@ -345,7 +347,7 @@ public class PulsarModMain extends Mod {
                     float dst = Mathf.dst(unit.x, unit.y, b.x, b.y);
                     if (dst >= prevRadius && dst <= shockwaveRadius + shockwaveThickness) {
                         if (!isBlockedByShield(unit.x, unit.y, b.x, b.y)) {
-                            spawnExplosion(b.x, b.y);
+                            lastSparkX = b.x; lastSparkY = b.y; lastSparkTime = Time.time;
                             b.kill();
                         }
                     }
@@ -354,34 +356,23 @@ public class PulsarModMain extends Mod {
             }
         }
 
-        private void spawnExplosion(float x, float y) {
-            lastExplosionX = x;
-            lastExplosionY = y;
-            lastExplosionTime = Time.time;
-        }
-
         private boolean isBlockedByShield(float sx, float sy, float tx, float ty) {
             for (Building b : Groups.build) {
                 if (b == null || !b.isValid()) continue;
-                String blockName = b.block.name.toLowerCase();
-                boolean isShield = blockName.contains("shield") || blockName.contains("force") ||
-                                   blockName.contains("力墙") || blockName.contains("防护");
+                boolean isShield = b instanceof ShieldWall.ShieldWallBuild;
                 if (!isShield) {
-                    try {
-                        java.lang.reflect.Field f = b.block.getClass().getDeclaredField("shieldHealth");
-                        f.setAccessible(true);
-                        float shield = f.getFloat(b.block);
-                        isShield = shield > 0;
-                    } catch (Exception ignored) {}
+                    String bn = b.block.name.toLowerCase();
+                    isShield = bn.contains("shield") || bn.contains("force") ||
+                               bn.contains("力墙") || bn.contains("防护");
                 }
                 if (isShield) {
                     if (hitShields.contains(b)) continue;
                     float dist = distanceToSegment(b.x, b.y, sx, sy, tx, ty);
                     float size = b.block.size * 4f;
-                    if (dist <= size + 4f) {
+                    if (dist <= size + shockwaveThickness) {
                         b.damage(200f);
                         hitShields.add(b);
-                        spawnExplosion(b.x, b.y);
+                        lastSparkX = b.x; lastSparkY = b.y; lastSparkTime = Time.time;
                         if (DEBUG) Log.info("[PulsarMod] 力墙挡下冲击波！");
                         return true;
                     }
@@ -395,52 +386,54 @@ public class PulsarModMain extends Mod {
             Draw.reset();
             float x = unit.x, y = unit.y, time = Time.time;
 
-            if (Time.time - lastExplosionTime < 30f) {
-                float age = Time.time - lastExplosionTime;
-                float progress = age / 30f;
-                float explosionR = progress * 25f;
-                float alpha = 1f - progress;
-                Draw.z(115f);
-                Draw.color(coreColor, alpha * 0.8f);
-                Fill.circle(lastExplosionX, lastExplosionY, explosionR);
-                Draw.color(Color.white, alpha * 0.6f);
-                Fill.circle(lastExplosionX, lastExplosionY, explosionR * 0.4f);
+            if (Time.time - lastSparkTime < SPARK_LIFETIME) {
+                float age = Time.time - lastSparkTime;
+                float p = age / SPARK_LIFETIME;
+                Draw.z(150f);
+                Draw.color(ringColor, 1f - p);
+                for (int i = 0; i < 10; i++) {
+                    float a = Mathf.random(360f);
+                    float d = p * 25f;
+                    Fill.circle(lastSparkX + Angles.trnsx(a, d),
+                                lastSparkY + Angles.trnsy(a, d),
+                                (1f - p) * 4f);
+                }
                 Draw.reset();
             }
 
             float timeToNext = shockwaveInterval - shockwaveTimer;
             if (timeToNext <= 3f * 60f && shockwaveRadius < 0f) {
-                float progress = 1f - (timeToNext / (3f * 60f));
+                float p = 1f - (timeToNext / (3f * 60f));
                 Draw.z(111f);
-                Draw.color(coreColor, 0.3f + progress * 0.5f);
-                Fill.circle(x, y, baseRadius * (1f + progress * 1.5f) + Mathf.sin(time * 10f) * 2f);
+                Draw.color(ringColor, 0.3f + p * 0.5f);
+                Lines.stroke(2f);
+                Lines.circle(x, y, baseRadius * (1f + p * 1.5f) + Mathf.sin(time * 10f) * 2f);
             }
 
             if (shockwaveRadius >= 0f) {
-                Draw.z(120f);
-                float alpha = 0.4f * (1f - shockwaveRadius / shockwaveMaxRadius);
-                Draw.color(coreColor, alpha);
-                Fill.circle(x, y, shockwaveRadius);
-                Draw.color(coreColor, alpha * 2f);
+                Draw.z(130f);
+                float alpha = 0.5f * (1f - shockwaveRadius / shockwaveMaxRadius);
+                Draw.color(ringColor, alpha * 2f);
                 Lines.stroke(shockwaveThickness);
                 Lines.circle(x, y, shockwaveRadius);
-                Draw.color(Color.white, alpha);
+                Draw.color(Color.white, alpha * 1.5f);
                 Lines.stroke(3f + Mathf.sin(time * 10f) * 2f);
                 Lines.circle(x, y, shockwaveRadius);
-                for (int i = 0; i < 24; i++) {
-                    float angle = time * 3f + i * 15f;
-                    float px = x + Angles.trnsx(angle, shockwaveRadius);
-                    float py = y + Angles.trnsy(angle, shockwaveRadius);
-                    Draw.color(coreColor, alpha * 2f);
+                for (int i = 0; i < 48; i++) {
+                    float a = time * 3f + i * 7.5f;
+                    float px = x + Angles.trnsx(a, shockwaveRadius);
+                    float py = y + Angles.trnsy(a, shockwaveRadius);
+                    Draw.color(ringColor, alpha * 2f);
                     Fill.circle(px, py, 3f + Mathf.sin(time * 5f + i) * 2f);
                 }
+                Draw.reset();
             }
 
             Draw.z(110f);
-            Draw.color(coreColor);
+            Draw.color(ringColor);
             Fill.circle(x, y, baseRadius * 1.5f);
             Fill.circle(x, y, baseRadius * 0.5f);
-            Draw.color(Color.white, coreColor, 0.5f + Mathf.sin(time, 8f, 0.5f));
+            Draw.color(Color.white, ringColor, 0.5f + Mathf.sin(time, 8f, 0.5f));
             Fill.circle(x, y, baseRadius * 0.8f);
 
             Draw.reset();
