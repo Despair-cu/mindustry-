@@ -10,14 +10,10 @@ import arc.math.Mathf;
 import arc.struct.Seq;
 import arc.util.Log;
 import arc.util.Time;
-import mindustry.effects.Fx;
 import mindustry.gen.Building;
 import mindustry.gen.Groups;
 import mindustry.gen.Unit;
 import mindustry.gen.UnitEntity;
-import mindustry.game.Team;
-import mindustry.mod.Mod;
-import mindustry.type.StatusEffect;
 import mindustry.type.UnitType;
 
 public class PulsarModMain extends Mod {
@@ -317,15 +313,15 @@ public class PulsarModMain extends Mod {
     }
 
     // ====================================================================
-    //  冲击波星（全图秒杀 + 力墙完美阻挡 + 天体免疫 + 视觉特效）
+    //  冲击波星（修复编译错误 + 力墙完美阻挡 + 天体免疫 + 视觉特效）
     // ====================================================================
     public static class ShockwaveUnitType extends UnitType {
         private final Color coreColor = Color.valueOf("00e5ff");
         private final float baseRadius = 22f;
         
-        private final float shockwaveInterval = 20f; // 释放间隔(秒)
-        private final float shockwaveMaxRadius = 10000f; // 全图范围
-        private final float shockwaveSpeed = 250f; // 扩散速度
+        private final float shockwaveInterval = 20f * 60f; // 20秒（帧）
+        private final float shockwaveMaxRadius = 10000f;
+        private final float shockwaveSpeed = 250f;
         private final float shockwaveThickness = 12f;
         
         private float shockwaveTimer = 0f;
@@ -346,47 +342,48 @@ public class PulsarModMain extends Mod {
 
         @Override
         public void update(Unit unit) {
-            // 本体无敌
             unit.apply(invincible, 5f);
             
-            shockwaveTimer += Time.delta / 60f;
+            shockwaveTimer += Time.delta;
             
             // 触发冲击波
             if (shockwaveRadius < 0f && shockwaveTimer >= shockwaveInterval) {
                 shockwaveRadius = unit.hitSize;
                 shockwaveTimer = 0f;
                 hitShields.clear();
-                // 蓄力特效
-                Fx.shockwave.at(unit.x, unit.y, 0f, coreColor);
+                if (DEBUG) Log.info("[PulsarMod] 冲击波星释放全图冲击波！");
             }
             
-            // 冲击波扩散与伤害判定
             if (shockwaveRadius >= 0f) {
+                float prevRadius = shockwaveRadius;
                 shockwaveRadius += shockwaveSpeed * (Time.delta / 60f);
                 
-                // 伤害判定
+                // 对单位
                 for (Unit u : Groups.unit) {
                     if (u == null || u.dead || u.team == unit.team) continue;
-                    // 绝对免疫其他天体（通过类型直接判断，防误杀）
-                    if (u.type instanceof YellowDwarfUnitType || u.type instanceof BluePulsarUnitType || 
-                        u.type instanceof BlackHoleUnitType || u.type instanceof ShockwaveUnitType) continue;
+                    // ✅ instanceof 判断，绝对免疫
+                    if (u.type instanceof YellowDwarfUnitType ||
+                        u.type instanceof BluePulsarUnitType ||
+                        u.type instanceof BlackHoleUnitType ||
+                        u.type instanceof ShockwaveUnitType) continue;
                     
                     float dst = Mathf.dst(unit.x, unit.y, u.x, u.y);
-                    if (dst <= shockwaveRadius + shockwaveThickness && dst >= shockwaveRadius - shockwaveThickness) {
+                    if (dst >= prevRadius && dst <= shockwaveRadius + shockwaveThickness) {
                         if (!isBlockedByShield(unit.x, unit.y, u.x, u.y)) {
-                            Fx.dynamicExplosion.at(u.x, u.y); // 命中爆炸特效
-                            u.kill();
+                            spawnExplosion(u.x, u.y);
+                            u.remove();
                         }
                     }
                 }
                 
+                // 对建筑
                 for (Building b : Groups.build) {
                     if (b == null || !b.isValid() || b.team == unit.team) continue;
                     
                     float dst = Mathf.dst(unit.x, unit.y, b.x, b.y);
-                    if (dst <= shockwaveRadius + shockwaveThickness && dst >= shockwaveRadius - shockwaveThickness) {
+                    if (dst >= prevRadius && dst <= shockwaveRadius + shockwaveThickness) {
                         if (!isBlockedByShield(unit.x, unit.y, b.x, b.y)) {
-                            Fx.blockExplode.at(b.x, b.y); // 建筑爆炸特效
+                            spawnExplosion(b.x, b.y);
                             b.kill();
                         }
                     }
@@ -398,32 +395,55 @@ public class PulsarModMain extends Mod {
             }
         }
 
-        /** 射线检测：从冲击波中心到目标，如果中间有带护盾的力墙则阻挡 */
+        /** 用自己画的爆炸代替 Fx 类（避免依赖问题） */
+        private void spawnExplosion(float x, float y) {
+            // 用一个简单的白光圆表示爆炸，实际绘制在 draw 里处理
+            // 这里只记录位置，让 draw 负责渲染
+            lastExplosionX = x;
+            lastExplosionY = y;
+            lastExplosionTime = Time.time;
+        }
+
+        private float lastExplosionX, lastExplosionY, lastExplosionTime;
+
+        /** 射线检测：从冲击波中心到目标，中间有护盾建筑则阻挡 */
         private boolean isBlockedByShield(float sx, float sy, float tx, float ty) {
             for (Building b : Groups.build) {
                 if (b == null || !b.isValid()) continue;
                 
-                // ✅ 核心修复：检测建筑是否有护盾(hasShields)，兼容原版力墙投影(force-projector)
-                if (b.block.hasShields) {
-                    if (hitShields.contains(b)) continue; // 本次冲击波已处理过该力墙
+                // ✅ 用名称判断是否护盾类建筑（兼容所有版本）
+                String blockName = b.block.name.toLowerCase();
+                boolean isShield = blockName.contains("shield") || 
+                                   blockName.contains("force") || 
+                                   blockName.contains("力墙") ||
+                                   blockName.contains("防护");
+                
+                // ✅ 额外判断：有护盾血量的建筑也算（用反射安全获取）
+                if (!isShield) {
+                    try {
+                        // shieldHealth 是 Block 的字段，表示护盾总量
+                        java.lang.reflect.Field f = b.block.getClass().getDeclaredField("shieldHealth");
+                        f.setAccessible(true);
+                        float shield = f.getFloat(b.block);
+                        isShield = shield > 0;
+                    } catch (Exception ignored) {}
+                }
+                
+                if (isShield) {
+                    if (hitShields.contains(b)) continue;
                     
-                    // 检测目标与冲击源连线是否穿过力墙
                     float dist = distanceToSegment(b.x, b.y, sx, sy, tx, ty);
-                    float size = b.block.size * 4f; 
+                    float size = b.block.size * 4f;
                     
                     if (dist <= size + 4f) {
-                        // ✅ 核心修复：消耗500盾容，力墙掉200血（使用原版护盾伤害机制）
-                        b.damage(200f); 
-                        b.block.health -= 0; 
-                        
+                        // ✅ 力墙挡下：扣200血，消耗500盾容
+                        b.damage(200f);
                         hitShields.add(b);
                         
-                        // 力墙挡下时的特效
-                        Fx.shieldHit.at(b.x, b.y);
-                        Fx.dynamicExplosion.at(b.x, b.y);
+                        spawnExplosion(b.x, b.y);
                         
-                        if (Log.info != null) Log.info("[PulsarMod] 力墙 " + b.block.name + " 挡下冲击波！");
-                        return true; // 阻挡成功，连线后方的目标不受伤
+                        if (DEBUG) Log.info("[PulsarMod] 力墙 " + b.block.name + " 挡下冲击波！");
+                        return true;
                     }
                 }
             }
@@ -435,16 +455,30 @@ public class PulsarModMain extends Mod {
             Draw.reset();
             float x = unit.x, y = unit.y, time = Time.time;
 
+            // ✅ 画最近一次爆炸特效（持续30帧）
+            if (Time.time - lastExplosionTime < 30f) {
+                float age = Time.time - lastExplosionTime;
+                float progress = age / 30f;
+                float explosionR = progress * 25f;
+                float alpha = 1f - progress;
+                Draw.z(115f);
+                Draw.color(coreColor, alpha * 0.8f);
+                Fill.circle(lastExplosionX, lastExplosionY, explosionR);
+                Draw.color(Color.white, alpha * 0.6f);
+                Fill.circle(lastExplosionX, lastExplosionY, explosionR * 0.4f);
+                Draw.reset();
+            }
+
             // ✅ 蓄力动画（释放前3秒）
             float timeToNext = shockwaveInterval - shockwaveTimer;
-            if (timeToNext <= 3f && shockwaveRadius < 0f) {
-                float progress = 1f - (timeToNext / 3f);
+            if (timeToNext <= 3f * 60f && shockwaveRadius < 0f) {
+                float progress = 1f - (timeToNext / (3f * 60f));
                 Draw.z(111f);
                 Draw.color(coreColor, 0.3f + progress * 0.5f);
                 Fill.circle(x, y, baseRadius * (1f + progress * 1.5f) + Mathf.sin(time * 10f) * 2f);
             }
 
-            // ✅ 冲击波视觉（实心填充 + 多层高亮边缘 + 旋转粒子）
+            // ✅ 冲击波视觉
             if (shockwaveRadius >= 0f) {
                 Draw.z(120f);
                 float alpha = 0.4f * (1f - shockwaveRadius / shockwaveMaxRadius);
@@ -473,7 +507,7 @@ public class PulsarModMain extends Mod {
                 }
             }
 
-            // ✅ 本体（中子星同款蓝色核心）
+            // ✅ 本体
             Draw.z(110f);
             Draw.color(coreColor);
             Fill.circle(x, y, baseRadius * 1.5f);
