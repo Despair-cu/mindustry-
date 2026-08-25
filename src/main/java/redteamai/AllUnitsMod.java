@@ -29,14 +29,14 @@ public class AllUnitsMod extends Mod {
     public static UnitType crimsonDemonUnit, cobaltShielderUnit;
     public static UnitType rainbowTitanUnit, emeraldCommanderUnit;
 
-    // ==================== Pixmap 辅助方法 ====================
-    // 注意：这里用 arc.graphics.Pixmap 的全限定名，避免 import 歧义
+    // ==================== 辅助：设置 Pixmap 颜色 ====================
 
-    private void setColor(arc.graphics.Pixmap pix, Color c) {
-        pix.setColor(c);
+    private void pc(arc.graphics.Pixmap pix, Color c) {
+        pix.setColor(c.r, c.g, c.b, c.a);
     }
 
-    /** 自己实现的椭圆填充 */
+    // ==================== Pixmap 辅助方法 ====================
+
     private void fillEllipse(arc.graphics.Pixmap pix, int x, int y, int width, int height) {
         int xc = x + width / 2;
         int yc = y + height / 2;
@@ -63,7 +63,6 @@ public class AllUnitsMod extends Mod {
         }
     }
 
-    /** 自己实现的三角形填充 */
     private void fillTriangle(arc.graphics.Pixmap pix, int x1, int y1, int x2, int y2, int x3, int y3) {
         int minX = Math.max(0, Math.min(x1, Math.min(x2, x3)));
         int maxX = Math.min(31, Math.max(x1, Math.max(x2, x3)));
@@ -95,27 +94,30 @@ public class AllUnitsMod extends Mod {
     private TextureRegion generateSprite(String name, int mainColor, int accentColor, boolean isFly) {
         int size = 32;
         arc.graphics.Pixmap pix = new arc.graphics.Pixmap(size, size);
-        pix.fill(Color.valueOf("2a2a2a"));
+        Color bg = Color.valueOf("2a2a2a");
+        pix.setColor(bg.r, bg.g, bg.b, bg.a);
+        pix.fill();
 
         Color mc = new Color(mainColor);
         Color ac = new Color(accentColor);
 
         if (isFly) {
-            pix.setColor(mc);
+            pc(pix, mc);
             fillTriangle(pix, 4, 28, 16, 4, 28, 28);
-            pix.setColor(ac);
+            pc(pix, ac);
             fillTriangle(pix, 10, 26, 16, 10, 22, 26);
         } else {
-            pix.setColor(mc);
+            pc(pix, mc);
             pix.fillRect(4, 4, 24, 24);
-            pix.setColor(ac);
+            pc(pix, ac);
             pix.fillRect(10, 10, 12, 12);
             if (!name.contains("factory")) {
-                pix.setColor(Color.valueOf("888888"));
+                Color gray = Color.valueOf("888888");
+                pc(pix, gray);
                 pix.drawRect(4, 4, 24, 24);
             }
         }
-        pix.setColor(ac);
+        pc(pix, ac);
         pix.drawRect(0, 0, size - 1, size - 1);
 
         TextureRegion region = new TextureRegion(new arc.graphics.Texture(pix));
@@ -127,102 +129,111 @@ public class AllUnitsMod extends Mod {
     private TextureRegion generateSpecialSprite(String name, int mainColor, int accentColor, int type) {
         int size = 32;
         arc.graphics.Pixmap pix = new arc.graphics.Pixmap(size, size);
-        pix.fill(Color.valueOf("2a2a2a"));
+        Color bg = Color.valueOf("2a2a2a");
+        pix.setColor(bg.r, bg.g, bg.b, bg.a);
+        pix.fill();
 
         Color mc = new Color(mainColor);
         Color ac = new Color(accentColor);
 
-        pix.setColor(mc);
+        pc(pix, mc);
 
         switch (type) {
             case 0:
                 fillTriangle(pix, 2, 30, 16, 4, 30, 30);
                 pix.fillRect(2, 20, 28, 10);
-                pix.setColor(ac);
+                pc(pix, ac);
                 pix.fillRect(12, 8, 8, 12);
                 break;
             case 1:
                 pix.fillRect(2, 2, 28, 28);
-                pix.setColor(ac);
+                pc(pix, ac);
                 pix.fillRect(8, 8, 16, 16);
-                pix.setColor(Color.valueOf("AAAAAA"));
+                Color gray1 = Color.valueOf("AAAAAA");
+                pc(pix, gray1);
                 fillTriangle(pix, 14, 4, 18, 4, 16, 12);
                 break;
             case 2:
                 pix.fillCircle(16, 16, 14);
-                pix.setColor(ac);
+                pc(pix, ac);
                 pix.fillRect(13, 6, 6, 20);
                 pix.fillRect(6, 13, 20, 6);
                 break;
             case 3:
                 pix.fillRect(2, 8, 28, 16);
-                pix.setColor(ac);
+                pc(pix, ac);
                 pix.fillRect(8, 2, 16, 8);
                 pix.fillRect(22, 0, 8, 6);
-                pix.setColor(Color.valueOf("FF5555"));
+                Color red1 = Color.valueOf("FF5555");
+                pc(pix, red1);
                 pix.fillRect(28, 1, 4, 4);
                 break;
             case 4:
                 pix.fillCircle(16, 16, 12);
-                pix.setColor(ac);
+                pc(pix, ac);
                 pix.fillRect(14, 4, 4, 24);
                 pix.fillRect(4, 14, 24, 4);
                 break;
             case 5:
                 fillTriangle(pix, 16, 2, 30, 16, 16, 30);
                 fillTriangle(pix, 16, 2, 2, 16, 16, 30);
-                pix.setColor(ac);
+                pc(pix, ac);
                 pix.fillCircle(16, 16, 4);
                 break;
             case 6:
                 pix.fillCircle(16, 16, 14);
-                pix.setColor(ac);
+                pc(pix, ac);
                 pix.fillCircle(16, 16, 8);
-                pix.setColor(Color.valueOf("FF0000"));
+                Color red2 = Color.valueOf("FF0000");
+                pc(pix, red2);
                 pix.fillCircle(10, 12, 3);
                 pix.fillCircle(22, 12, 3);
                 pix.fillRect(14, 18, 4, 2);
                 break;
             case 7:
                 fillEllipse(pix, 4, 8, 24, 16);
-                pix.setColor(ac);
+                pc(pix, ac);
                 pix.fillRect(0, 14, 6, 4);
                 pix.fillRect(26, 14, 6, 4);
-                pix.setColor(mc);
+                pc(pix, mc);
                 pix.fillRect(14, 12, 4, 8);
                 break;
             case 8:
                 pix.fillRect(2, 6, 28, 20);
-                pix.setColor(ac);
+                pc(pix, ac);
                 pix.fillRect(6, 10, 20, 12);
-                pix.setColor(Color.valueOf("FFCC00"));
+                Color yellow1 = Color.valueOf("FFCC00");
+                pc(pix, yellow1);
                 pix.fillRect(4, 8, 4, 4);
                 pix.fillRect(24, 8, 4, 4);
                 break;
             case 9:
                 pix.fillCircle(16, 18, 10);
-                pix.setColor(ac);
+                pc(pix, ac);
                 fillTriangle(pix, 16, 2, 20, 8, 12, 8);
                 pix.fillRect(14, 8, 4, 16);
-                pix.setColor(Color.valueOf("FF0000"));
+                Color red3 = Color.valueOf("FF0000");
+                pc(pix, red3);
                 pix.fillCircle(12, 16, 2);
                 pix.fillCircle(20, 16, 2);
                 break;
             case 10:
                 pix.fillRect(4, 12, 24, 8);
-                pix.setColor(ac);
+                pc(pix, ac);
                 pix.fillRect(14, 2, 4, 20);
                 pix.fillRect(2, 14, 28, 4);
-                pix.setColor(Color.valueOf("FF0000"));
+                Color red4 = Color.valueOf("FF0000");
+                pc(pix, red4);
                 pix.fillCircle(16, 16, 2);
                 pix.fillRect(28, 14, 4, 4);
                 break;
             case 11:
                 pix.fillCircle(16, 16, 14);
-                pix.setColor(ac);
+                pc(pix, ac);
                 fillTriangle(pix, 16, 4, 24, 10, 24, 22);
                 fillTriangle(pix, 16, 4, 8, 10, 8, 22);
-                pix.setColor(Color.valueOf("FFAA00"));
+                Color orange1 = Color.valueOf("FFAA00");
+                pc(pix, orange1);
                 for (int i = 0; i < 5; i++) {
                     int cx = 10 + (i % 3) * 6;
                     int cy = 8 + (i / 3) * 8;
@@ -231,26 +242,29 @@ public class AllUnitsMod extends Mod {
                 break;
             case 12:
                 pix.fillRect(4, 4, 12, 24);
-                pix.setColor(ac);
+                pc(pix, ac);
                 pix.fillRect(6, 6, 8, 20);
-                pix.setColor(Color.valueOf("CCCCCC"));
+                Color gray2 = Color.valueOf("CCCCCC");
+                pc(pix, gray2);
                 pix.fillRect(20, 8, 4, 16);
                 fillTriangle(pix, 18, 8, 26, 8, 22, 2);
                 pix.fillRect(18, 24, 8, 4);
                 break;
             case 13:
                 pix.fillRect(2, 12, 28, 8);
-                pix.setColor(ac);
+                pc(pix, ac);
                 pix.fillRect(26, 10, 6, 12);
-                pix.setColor(Color.valueOf("00FFFF"));
+                Color cyan1 = Color.valueOf("00FFFF");
+                pc(pix, cyan1);
                 pix.fillCircle(16, 16, 4);
                 pix.fillRect(6, 14, 8, 4);
                 break;
             case 14:
                 pix.fillCircle(16, 16, 12);
-                pix.setColor(ac);
+                pc(pix, ac);
                 fillTriangle(pix, 16, 2, 22, 10, 10, 10);
-                pix.setColor(Color.valueOf("FF5500"));
+                Color orange2 = Color.valueOf("FF5500");
+                pc(pix, orange2);
                 for (int i = 0; i < 6; i++) {
                     float angle = i * 60f + 30;
                     int cx = (int)(16 + 14 * Math.cos(angle * Math.PI / 180));
@@ -260,15 +274,16 @@ public class AllUnitsMod extends Mod {
                 break;
             case 15:
                 pix.fillCircle(16, 16, 14);
-                pix.setColor(ac);
+                pc(pix, ac);
                 pix.fillCircle(16, 16, 10);
-                pix.setColor(Color.valueOf("88CCFF"));
+                Color blue1 = Color.valueOf("88CCFF");
+                pc(pix, blue1);
                 pix.drawCircle(16, 16, 6);
                 pix.drawCircle(16, 16, 10);
                 break;
             case 16:
                 pix.fillRect(2, 8, 28, 20);
-                pix.setColor(ac);
+                pc(pix, ac);
                 fillTriangle(pix, 4, 8, 8, 2, 12, 8);
                 fillTriangle(pix, 12, 8, 16, 2, 20, 8);
                 fillTriangle(pix, 20, 8, 24, 2, 28, 8);
@@ -277,10 +292,11 @@ public class AllUnitsMod extends Mod {
                 break;
             case 17:
                 pix.fillCircle(16, 16, 14);
-                pix.setColor(ac);
+                pc(pix, ac);
                 pix.drawCircle(16, 16, 10);
                 pix.drawCircle(16, 16, 6);
-                pix.setColor(Color.valueOf("00FFAA"));
+                Color green1 = Color.valueOf("00FFAA");
+                pc(pix, green1);
                 pix.fillCircle(16, 16, 3);
                 for (int i = 0; i < 8; i++) {
                     float angle = i * 45f;
@@ -291,7 +307,7 @@ public class AllUnitsMod extends Mod {
                 break;
         }
 
-        pix.setColor(ac);
+        pc(pix, ac);
         pix.drawRect(0, 0, size - 1, size - 1);
         TextureRegion region = new TextureRegion(new arc.graphics.Texture(pix));
         Core.atlas.addRegion(name, region);
