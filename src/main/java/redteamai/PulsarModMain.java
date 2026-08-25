@@ -7,16 +7,14 @@ import arc.graphics.g2d.Fill;
 import arc.graphics.g2d.Lines;
 import arc.math.Angles;
 import arc.math.Mathf;
-import arc.math.geom.Vec2;
 import arc.struct.Seq;
 import arc.util.Log;
 import arc.util.Time;
 import mindustry.content.StatusEffects;
+import mindustry.game.EventType.TapEvent;
 import mindustry.gen.Groups;
-import mindustry.gen.Player;
 import mindustry.gen.Unit;
 import mindustry.gen.UnitEntity;
-import mindustry.game.Team;
 import mindustry.mod.Mod;
 import mindustry.type.UnitType;
 
@@ -24,14 +22,57 @@ public class PulsarModMain extends Mod {
 
     public static boolean DEBUG = false;
 
+    // 建造者（原戴森工程师）按钮参数，集中管理
+    private static final float BUILDER_BTN_RADIUS = 18f;
+    private static final float BUILDER_BTN_OFFSET_X = 30f;
+    private static final float BUILDER_BTN_OFFSET_Y = 30f;
+    private static final float BUILDER_INVINCIBLE_SECONDS = 30f;
+
     @Override
     public void loadContent() {
         Log.info("[PulsarMod] 加载恒星单位...");
         new YellowDwarfUnitType("yellow-dwarf").load();
         new BluePulsarUnitType("blue-pulsar").load();
         new BlackHoleUnitType("black-hole").load();
-        new DysonEngineerUnitType("dyson-engineer").load();
+        new BuilderUnitType("dyson-builder").load(); // 原 DysonEngineer，现重命名为建造者
         Log.info("[PulsarMod] 所有单位注册完成");
+
+        // 全局单次点击监听：只注册一次，避免每帧轮询 + 多单位抢触发
+        registerBuilderTapListener();
+    }
+
+    // ====================================================================
+    //  全局点击监听：建造者（原戴森工程师）按钮
+    //  用 TapEvent 而非 update() 里轮询，保证一次点击只触发一次
+    // ====================================================================
+    private void registerBuilderTapListener() {
+        mindustry.gen.Events.run(() -> {
+            // 注意：EventType.TapEvent 需在 loadContent 之后注册；这里用 mindustry 的事件总线
+        });
+
+        // 采用 mindustry 标准事件注册方式
+        mindustry.game.Event.on(TapEvent.class, e -> {
+            // e.position 已经是世界坐标，无需手动转换
+            float tx = e.position.x, ty = e.position.y;
+
+            for (Unit u : Groups.unit) {
+                if (u == null || u.dead || !(u.type instanceof BuilderUnitType)) continue;
+
+                float bx = u.x + BUILDER_BTN_OFFSET_X;
+                float by = u.y + BUILDER_BTN_OFFSET_Y;
+
+                if (Mathf.dst(tx, ty, bx, by) < BUILDER_BTN_RADIUS) {
+                    // 状态来源 = 真实效果，不存 boolean 字段
+                    if (u.hasEffect(StatusEffects.invincible)) {
+                        u.unapply(StatusEffects.invincible);
+                        if (DEBUG) Log.info("[PulsarMod] 建造者 " + u.id + " 无敌已关闭");
+                    } else {
+                        u.apply(StatusEffects.invincible, BUILDER_INVINCIBLE_SECONDS * 60f);
+                        if (DEBUG) Log.info("[PulsarMod] 建造者 " + u.id + " 开启 " + BUILDER_INVINCIBLE_SECONDS + " 秒无敌");
+                    }
+                }
+            }
+        });
     }
 
     // ====================================================================
@@ -48,11 +89,13 @@ public class PulsarModMain extends Mod {
         private final float gravityStrength = 1.0f;
         private final float suckDamage = 1000000f;
 
+        // 戴森云状态：存在 UnitType 单例上，所有黄矮星共享（按需求保留）
+        // 若需 per-unit，应改用 UnitController 存储
         public boolean hasDysonSwarm = false;
 
         public YellowDwarfUnitType(String name) {
             super(name);
-            health = Integer.MAX_VALUE;
+            health = Float.MAX_VALUE; // ✅ 用 float 最大值，杜绝 int 溢出瞬秒
             speed = 0f;
             rotateSpeed = 8f;
             hitSize = baseRadius * 2f;
@@ -64,7 +107,7 @@ public class PulsarModMain extends Mod {
 
         @Override
         public void update(Unit unit) {
-            unit.health = health;
+            unit.health = health; // 每帧回满，配合 Float.MAX_VALUE
             for (Unit u : Groups.unit) {
                 if (u == null || u.dead || u.team == unit.team) continue;
                 float dst = Mathf.dst(unit.x, unit.y, u.x, u.y);
@@ -109,7 +152,7 @@ public class PulsarModMain extends Mod {
                 Fill.circle(x + Angles.trnsx(a, d), y + Angles.trnsy(a, d), 2.5f + pulse * 1.2f);
             }
 
-            // 戴森云特效
+            // 戴森云特效（确定性角度，不用 rand seed）
             if (hasDysonSwarm) {
                 Draw.z(105f);
                 float cloudTime = time * 0.8f;
@@ -120,14 +163,13 @@ public class PulsarModMain extends Mod {
                     Lines.stroke(2.5f + Mathf.sin(cloudTime + i * 60f, 5f, 1.5f));
                     Lines.circle(x, y, r + Mathf.sin(cloudTime + i * 60f, 10f, 3f));
                 }
-                Mathf.rand.setSeed(42);
                 for (int i = 0; i < 20; i++) {
-                    float a = cloudTime * (1.2f + i * 0.1f) + i * 137f;
+                    // 黄金角分布：确定性，不污染全局随机种子
+                    float a = cloudTime * 1.2f + i * 137.5f;
                     float r = baseRadius + 15f + (i % 3) * 7f;
                     Draw.color(Color.valueOf("fffacd"), 0.6f);
                     Fill.circle(x + Angles.trnsx(a, r), y + Angles.trnsy(a, r), 1.5f);
                 }
-                Mathf.rand.setSeed(0);
             }
 
             Draw.reset();
@@ -155,7 +197,7 @@ public class PulsarModMain extends Mod {
 
         public BluePulsarUnitType(String name) {
             super(name);
-            health = Integer.MAX_VALUE;
+            health = Float.MAX_VALUE;
             speed = 0f;
             rotateSpeed = 12f;
             hitSize = baseRadius * 2f;
@@ -225,12 +267,14 @@ public class PulsarModMain extends Mod {
         private void drawNeutronJet(float x, float y, float angle, float time, long seed) {
             float spacing = 3.0f;
             float travel = time * particleSpeed;
-            Mathf.rand.setSeed(seed);
+            // 用确定性伪随机（基于 seed + 索引），不污染全局 Mathf.rand
             for (int i = 0; i < particleCount; i++) {
                 float dist = (travel + i * spacing) % jetLength;
                 float t = dist / jetLength;
                 float spread = t * 3f;
-                float offset = Mathf.rand.random(-spread, spread);
+                // 确定性随机偏移：用 sin 组合代替 rand
+                float offset = (Mathf.sin(i * 12.9898f + seed * 78.233f) * 43758.5453f % 1f);
+                offset = (offset - 0.5f) * 2f * spread;
                 float a = angle + offset;
                 float px = x + Angles.trnsx(a, dist);
                 float py = y + Angles.trnsy(a, dist);
@@ -242,20 +286,21 @@ public class PulsarModMain extends Mod {
 
                 float flicker = (Mathf.sin(dist * 0.15f - time * 0.4f) + 1f) / 2f;
                 float alpha = (1f - t * 0.8f) * (0.5f + flicker * 0.5f);
-                float size = (1.0f - t * 0.6f) * Mathf.rand.random(0.7f, 1.2f);
+                // 确定性大小扰动
+                float rnd = (Mathf.sin(i * 7.13f + seed) * 0.5f + 0.5f);
+                float size = (1.0f - t * 0.6f) * (0.7f + rnd * 0.5f);
                 size = Math.max(size, 0.15f);
 
                 Draw.color(c, alpha);
                 Fill.circle(px, py, size);
 
-                if (Mathf.rand.chance(0.06f)) {
-                    float sa = a + Mathf.rand.range(12f);
-                    float sd = dist + Mathf.rand.random(3f, 10f);
+                if (rnd > 0.94f) {
+                    float sa = a + (Mathf.sin(i * 3.7f) * 0.5f + 0.5f) * 24f - 12f;
+                    float sd = dist + 4f + rnd * 6f;
                     Draw.color(c, alpha * 0.3f);
                     Fill.circle(x + Angles.trnsx(sa, sd), y + Angles.trnsy(sa, sd), size * 0.4f);
                 }
             }
-            Mathf.rand.setSeed(0);
         }
 
         private float distanceToSegment(float px, float py, float x1, float y1, float x2, float y2) {
@@ -298,7 +343,7 @@ public class PulsarModMain extends Mod {
 
         public BlackHoleUnitType(String name) {
             super(name);
-            health = Integer.MAX_VALUE;
+            health = Float.MAX_VALUE;
             speed = 0f;
             rotateSpeed = 0f;
             hitSize = baseRadius * 2f;
@@ -368,14 +413,14 @@ public class PulsarModMain extends Mod {
         private void drawBlackHoleJets(float x, float y, float swing, float time) {
             float spacing = 1.0f;
             float travel = time * jetParticleSpeed;
-            Mathf.rand.setSeed(0);
             for (int sign : new int[]{1, -1}) {
                 float angle = 90f * sign + swing;
                 for (int i = 0; i < jetParticleCount; i++) {
                     float dist = (travel + i * spacing) % jetLength;
                     float t = dist / jetLength;
                     float spread = t * 3.5f;
-                    float offset = Mathf.rand.random(-spread, spread);
+                    float offset = (Mathf.sin(i * 12.9898f + sign * 78.233f) * 43758.5453f % 1f);
+                    offset = (offset - 0.5f) * 2f * spread;
                     float a = angle + offset;
                     float px = x + Angles.trnsx(a, dist);
                     float py = y + Angles.trnsy(a, dist);
@@ -387,28 +432,27 @@ public class PulsarModMain extends Mod {
 
                     float flicker = (Mathf.sin(dist * 0.15f - time * 0.5f) + 1f) / 2f;
                     float alpha = (1f - t * 0.75f) * (0.6f + flicker * 0.4f);
-                    float size = (1.5f - t * 1.0f) * Mathf.rand.random(0.8f, 1.5f);
+                    float rnd = (Mathf.sin(i * 7.13f + sign) * 0.5f + 0.5f);
+                    float size = (1.5f - t * 1.0f) * (0.8f + rnd * 0.7f);
                     size = Math.max(size, 0.25f);
 
                     Draw.color(c, alpha);
                     Fill.circle(px, py, size);
 
-                    if (Mathf.rand.chance(0.1f)) {
-                        float sa = a + Mathf.rand.range(18f);
-                        float sd = dist + Mathf.rand.random(4f, 15f);
+                    if (rnd > 0.9f) {
+                        float sa = a + (Mathf.sin(i * 3.7f + sign) * 0.5f + 0.5f) * 36f - 18f;
+                        float sd = dist + 4f + rnd * 11f;
                         Draw.color(c, alpha * 0.5f);
                         Fill.circle(x + Angles.trnsx(sa, sd), y + Angles.trnsy(sa, sd), size * 0.6f);
                     }
                 }
             }
-            Mathf.rand.setSeed(0);
         }
 
         private void drawAccretionDisk(float x, float y, float time) {
-            Mathf.rand.setSeed(777);
             for (int i = 0; i < diskParticles; i++) {
-                float t = Mathf.rand.random(0f, 1f);
-                float angle = time * diskSpeed * (1f + (1f - t) * 1.5f) + t * 360f * 2f;
+                float t = (Mathf.sin(i * 9.31f + 17.0f) * 0.5f + 0.5f); // 确定性 [0,1]
+                float angle = time * diskSpeed * (1f + (1f - t) * 1.5f) + t * 720f;
                 float rx = diskRx * (0.3f + t * 0.7f);
                 float ry = diskRy * (0.3f + t * 0.7f);
                 float px = x + Angles.trnsx(angle, rx);
@@ -423,7 +467,6 @@ public class PulsarModMain extends Mod {
                 Draw.color(c, alpha);
                 Fill.circle(px, py, size);
             }
-            Mathf.rand.setSeed(0);
         }
 
         private float distanceToSegment(float px, float py, float x1, float y1, float x2, float y2) {
@@ -437,17 +480,15 @@ public class PulsarModMain extends Mod {
     }
 
     // ====================================================================
-    //  ✅ 戴森工程师（修复点击检测 + 右上角按钮）
+    //  ✅ 建造者（原戴森工程师）：按钮交互 + 激活黄矮星戴森云
+    //  改动：点击检测移至全局 TapEvent；状态用真实 invincible 判断；
+    //        坐标用 TapEvent 自带世界坐标；移除 rand seed 污染
     // ====================================================================
-    public static class DysonEngineerUnitType extends UnitType {
+    public static class BuilderUnitType extends UnitType {
 
         private final float detectRange = 300f;
-        private final float btnRadius = 18f;
-        private final float btnOffsetX = 30f;
-        private final float btnOffsetY = 30f;
-        private boolean btnActive = false;
 
-        public DysonEngineerUnitType(String name) {
+        public BuilderUnitType(String name) {
             super(name);
             health = 5000;
             speed = 2.5f;
@@ -459,12 +500,12 @@ public class PulsarModMain extends Mod {
             region = Core.atlas.find("clear");
             drawBody = false;
             drawCell = false;
-            localizedName = "戴森工程师";
+            localizedName = "建造者"; // 原“戴森工程师”
         }
 
         @Override
         public void update(Unit unit) {
-            // 检测附近黄矮星
+            // 检测附近黄矮星，激活其戴森云（共享开关，逻辑与原文一致）
             for (Unit u : Groups.unit) {
                 if (u == null || u.dead || u.team != unit.team) continue;
                 if (u.type instanceof YellowDwarfUnitType) {
@@ -473,25 +514,7 @@ public class PulsarModMain extends Mod {
                     }
                 }
             }
-
-            // ✅ 用 isJustTapped() 检测点击
-            if (Core.input.isJustTapped()) {
-                Vec2 tap = Core.input.mouseWorld();
-                float bx = unit.x + btnOffsetX;
-                float by = unit.y + btnOffsetY;
-
-                if (Mathf.dst(tap.x, tap.y, bx, by) < btnRadius) {
-                    btnActive = !btnActive;
-                    if (btnActive) {
-                        // ✅ 30秒无敌（30 * 60 ticks）
-                        unit.apply(StatusEffects.invincible, 30f * 60f);
-                        if (DEBUG) Log.info("[PulsarMod] 戴森工程师开启30秒无敌！");
-                    } else {
-                        unit.unapply(StatusEffects.invincible);
-                        if (DEBUG) Log.info("[PulsarMod] 无敌已关闭");
-                    }
-                }
-            }
+            // ✅ 点击检测已移至全局 TapEvent，update 不再轮询输入
         }
 
         @Override
@@ -506,19 +529,22 @@ public class PulsarModMain extends Mod {
             Draw.color(Color.valueOf("aaddff"));
             Fill.circle(x, y, 4f);
 
-            // ✅ 右上角按钮
-            float bx = x + btnOffsetX;
-            float by = y + btnOffsetY;
+            // 右上角按钮
+            float bx = x + BUILDER_BTN_OFFSET_X;
+            float by = y + BUILDER_BTN_OFFSET_Y;
+            boolean active = unit.hasEffect(StatusEffects.invincible); // ✅ 状态 = 真实效果
 
             Draw.z(200f);
-            Draw.color(btnActive ? Color.green : Color.gray);
-            Fill.circle(bx, by, btnRadius);
+            Draw.color(active ? Color.green : Color.gray);
+            Fill.circle(bx, by, BUILDER_BTN_RADIUS);
+
+            // ✅ 三角形图标：Fill.poly(float[], count)
             Draw.color(Color.white);
-            Fill.triangle(
+            Fill.poly(new float[]{
                 bx - 5f, by - 5f,
                 bx - 5f, by + 5f,
                 bx + 6f, by
-            );
+            }, 3);
 
             Draw.reset();
             Draw.z(0f);
