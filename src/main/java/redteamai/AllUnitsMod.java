@@ -20,9 +20,10 @@ import java.lang.reflect.Constructor;
 
 /**
  * 针对 Mindustry v8 159.7 修正版
- * - 用 register() 注册（不是 regist）
- * - SpawnerAbility 通过反射适配不同版本构造签名
- * - factory / buildSpeed 用反射安全设置
+ * - 用反射注册（兼容 register / regist / ContentLoader.register）
+ * - SpawnerAbility 通过反射探测，不存在则跳过（功能降级但不崩溃）
+ * - factory / isFactory 通过反射设置，兼容两种字段名
+ * - 含完整的 rgba(int) / rgba(Color) / rgba(String) 三个重载，无 int 传参报错
  */
 public class AllUnitsMod extends Mod {
 
@@ -34,25 +35,22 @@ public class AllUnitsMod extends Mod {
     private static final BasicBulletType INCENDIARY = new BasicBulletType(3.0f, 15f);
     private static final BasicBulletType EXPLOSIVE = new BasicBulletType(0f, 80f) {{ range = 1f; }};
 
-    // 反射缓存：SpawnerAbility 构造器（不同版本签名不同）
+    // 反射缓存：SpawnerAbility 构造器（不同版本签名不同，不存在则为 null）
     private static Constructor<? extends Ability> spawnerCtor;
     static {
         try {
             Class<?> c = Class.forName("mindustry.entities.abilities.SpawnerAbility");
-            // 尝试几种常见签名
             Constructor<?> ctor = null;
             for (Constructor<?> cc : c.getConstructors()) {
-                Class<?>[] p = cc.getParameterTypes();
-                if (p.length == 4) { ctor = cc; break; }
+                if (cc.getParameterTypes().length == 4) { ctor = cc; break; }
             }
             if (ctor == null) ctor = c.getConstructor(Object.class, float.class, float.class, float.class);
             spawnerCtor = (Constructor<? extends Ability>) ctor;
         } catch (Exception e) {
-            spawnerCtor = null; // 159.7 没有 SpawnerAbility，保持 null
+            spawnerCtor = null;
         }
     }
 
-    /** 安全创建一个 "周期生成子弹" 的 ability；若 SpawnerAbility 不存在则返回 null */
     private static Ability makeSpawner(float interval, float angle, float x, float y, BasicBulletType bullet) {
         if (spawnerCtor == null) return null;
         try {
@@ -62,32 +60,28 @@ public class AllUnitsMod extends Mod {
         }
     }
 
-    /** 安全调用 unit.register() / regist() —— 159.7 是 register(UnitType) 但返回类型未知，用反射 */
     private static void register(UnitType u) {
         try {
-            // 先试 register(UnitType)
             java.lang.reflect.Method m = u.getClass().getMethod("register", UnitType.class);
             m.invoke(u, u);
         } catch (NoSuchMethodException e) {
             try {
-                // 再试无参 regist()
-                java.lang.reflect.Method m2 = u.getClass().getMethod("regist");
-                m2.invoke(u);
+                u.getClass().getMethod("regist").invoke(u);
             } catch (Exception e2) {
-                // fallback: ContentLoader
-                mindustry.Vars.content.getClass().getMethod("register", UnitType.class).invoke(mindustry.Vars.content, u);
-            } catch (Exception e3) { /* ignore */ }
+                try {
+                    mindustry.Vars.content.getClass().getMethod("register", UnitType.class).invoke(mindustry.Vars.content, u);
+                } catch (Exception e3) { /* ignore */ }
+            }
         } catch (Exception e) {
-            try { mindustry.Vars.content.getClass().getMethod("register", UnitType.class).invoke(mindustry.Vars.content, u); }
-            catch (Exception e2) { /* ignore */ }
+            try {
+                mindustry.Vars.content.getClass().getMethod("register", UnitType.class).invoke(mindustry.Vars.content, u);
+            } catch (Exception e2) { /* ignore */ }
         }
     }
 
-    /** 安全设置 "factory" 标志 —— 159.7 的 UnitType 用 isFactory 还是 factory 未知，两个都试 */
     private static void setFactory(UnitType u, boolean val) {
         try { u.getClass().getField("isFactory").set(u, val); } catch (Exception e) {}
         try { u.getClass().getField("factory").set(u, val); } catch (Exception e) {}
-        // 也试试 setter
         try { u.getClass().getMethod("factory", boolean.class).invoke(u, val); } catch (Exception e) {}
     }
 
@@ -104,13 +98,14 @@ public class AllUnitsMod extends Mod {
 
     private static final int S = 32;
 
-    // ==================== Raster（不变）====================
+    // ==================== Raster ====================
     static class Raster {
         final int[] px = new int[S * S];
         final int w = S, h = S;
         void fill(int rgba) { for (int i = 0; i < px.length; i++) px[i] = rgba; }
         void set(int x, int y, int rgba) { if (x < 0 || y < 0 || x >= w || y >= h) return; px[y * w + x] = rgba; }
         int get(int x, int y) { if (x < 0 || y < 0 || x >= w || y >= h) return 0; return px[y * w + x]; }
+        void dot(int x, int y, int rgba) { set(x, y, rgba); }
         void fillTriangle(int x1, int y1, int x2, int y2, int x3, int y3, int col) {
             int minX = Math.max(0, Math.min(x1, Math.min(x2, x3))), maxX = Math.min(w-1, Math.max(x1, Math.max(x2, x3)));
             int minY = Math.max(0, Math.min(y1, Math.min(y2, y3))), maxY = Math.min(h-1, Math.max(y1, Math.max(y2, y3)));
@@ -146,11 +141,20 @@ public class AllUnitsMod extends Mod {
         private int sign(int px, int py, int x1, int y1, int x2, int y2) { return (px - x2)*(y1 - y2) - (x1 - x2)*(py - y2); }
     }
 
+    // ==================== 颜色工具（三个重载，完整）====================
     static int rgba(Color c) {
         int r = (int)(c.r * 255), g = (int)(c.g * 255), b = (int)(c.b * 255), a = (int)(c.a * 255);
         return ((r & 0xFF) << 24) | ((g & 0xFF) << 16) | ((b & 0xFF) << 8) | (a & 0xFF);
     }
     static int rgba(String hex) { return rgba(Color.valueOf(hex)); }
+    /** 0xAARRGGBB -> RGBA8888（与 Pixmap / setRaw 一致） */
+    static int rgba(int hex) {
+        int r = (hex >> 24) & 0xFF;
+        int g = (hex >> 16) & 0xFF;
+        int b = (hex >> 8)  & 0xFF;
+        int a = (hex & 0xFF);
+        return ((r & 0xFF) << 24) | ((g & 0xFF) << 16) | ((b & 0xFF) << 8) | (a & 0xFF);
+    }
 
     private TextureRegion makeRegion(String name, Raster r) {
         Pixmap pix = new Pixmap(S, S);
@@ -220,7 +224,7 @@ public class AllUnitsMod extends Mod {
         }};
         redFactoryUnit = new UnitType("red-factory") {{
             health = 400f; speed = 0f; hitSize = 18f; buildSpeed = 2.5f;
-            setFactory(this, true);  // 兼容 factory / isFactory 两种写法
+            setFactory(this, true);
             region = generateSprite("red-factory", 0xFFFF5544, 0xFFFFFF00, false);
             weapons.add(new Weapon() {{ reload = 30f; bullet = COPPER; x = 0f; y = -4f; }});
             playerControllable = true;
@@ -272,7 +276,6 @@ public class AllUnitsMod extends Mod {
             playerControllable = true;
         }};
 
-        // 自杀单位：用自爆武器（不依赖 SpawnerAbility）
         orangeSuicideUnit = new UnitType("orange-suicide") {{
             health = 60f; speed = 5.5f; hitSize = 6f; flying = true;
             region = generateSpecialSprite("orange-suicide", 0xFFFF8800, 0xFFFFFFFF, 6);
@@ -379,7 +382,7 @@ public class AllUnitsMod extends Mod {
             playerControllable = true;
         }};
 
-        // ===== 统一注册（反射自动适配 register/regist 方法名）=====
+        // ===== 统一注册（反射自动适配）=====
         register(greenGroundUnit);
         register(blueFlyUnit);
         register(redFactoryUnit);
