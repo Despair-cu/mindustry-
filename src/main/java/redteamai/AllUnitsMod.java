@@ -2,6 +2,8 @@ package redteamai;
 
 import arc.Core;
 import arc.graphics.Color;
+import arc.graphics.Pixmap;
+import arc.graphics.Texture;
 import arc.graphics.g2d.TextureRegion;
 import mindustry.entities.abilities.ForceFieldAbility;
 import mindustry.entities.abilities.RepairFieldAbility;
@@ -16,6 +18,13 @@ import mindustry.mod.Mod;
 
 import static mindustry.Vars.content;
 
+/**
+ * 说明：
+ * 不同 Arc 版本的 Pixmap 绘制 API 签名不一致（fillRect/fillRectangle、drawPixel 等），
+ * 本文件完全不直接调用 Pixmap 的绘制方法，而是用一个 int[] 像素缓冲区（Raster）自己绘制，
+ * 最后用稳定存在的 new Pixmap(w, h) + Pixmap.setRaw(x, y, rgba8888) 逐像素写入来生成贴图。
+ * 已验证在 Anuken/Arc 官方源码（Pixmaps.noise/scale）中使用相同 API。
+ */
 public class AllUnitsMod extends Mod {
 
     public static UnitType greenGroundUnit, blueFlyUnit, redFactoryUnit;
@@ -29,290 +38,281 @@ public class AllUnitsMod extends Mod {
     public static UnitType crimsonDemonUnit, cobaltShielderUnit;
     public static UnitType rainbowTitanUnit, emeraldCommanderUnit;
 
-    // ==================== 辅助：设置 Pixmap 颜色 ====================
+    private static final int S = 32; // 贴图尺寸
 
-    private void pc(arc.graphics.Pixmap pix, Color c) {
-        pix.setColor(c.r, c.g, c.b, c.a);
-    }
+    // ==================== 像素缓冲区 ====================
 
-    // ==================== Pixmap 辅助方法 ====================
+    /** 一个 32x32 的 RGBA8888 像素缓冲区 */
+    static class Raster {
+        final int[] px = new int[S * S];
+        final int w = S, h = S;
 
-    private void fillEllipse(arc.graphics.Pixmap pix, int x, int y, int width, int height) {
-        int xc = x + width / 2;
-        int yc = y + height / 2;
-        int a = width / 2;
-        int b = height / 2;
-        if (a <= 0 || b <= 0) return;
+        void fill(int rgba) {
+            for (int i = 0; i < px.length; i++) px[i] = rgba;
+        }
 
-        int a2 = a * a;
-        int b2 = b * b;
+        void set(int x, int y, int rgba) {
+            if (x < 0 || y < 0 || x >= w || y >= h) return;
+            px[y * w + x] = rgba;
+        }
 
-        int minX = Math.max(0, x);
-        int maxX = Math.min(31, x + width);
-        int minY = Math.max(0, y);
-        int maxY = Math.min(31, y + height);
+        int get(int x, int y) {
+            if (x < 0 || y < 0 || x >= w || y >= h) return 0;
+            return px[y * w + x];
+        }
 
-        for (int py = minY; py <= maxY; py++) {
-            for (int px = minX; px <= maxX; px++) {
-                long dx = px - xc;
-                long dy = py - yc;
-                if (dx * dx * b2 + dy * dy * a2 <= (long) a2 * b2) {
-                    pix.drawPixel(px, py);
+        /** 用当前颜色画一个像素（带裁剪） */
+        void dot(int x, int y, int rgba) {
+            set(x, y, rgba);
+        }
+
+        /** 用 scanline 填充三角形 */
+        void fillTriangle(int x1, int y1, int x2, int y2, int x3, int y3, int col) {
+            int minX = Math.max(0, Math.min(x1, Math.min(x2, x3)));
+            int maxX = Math.min(w - 1, Math.max(x1, Math.max(x2, x3)));
+            int minY = Math.max(0, Math.min(y1, Math.min(y2, y3)));
+            int maxY = Math.min(h - 1, Math.max(y1, Math.max(y2, y3)));
+            for (int y = minY; y <= maxY; y++) {
+                for (int x = minX; x <= maxX; x++) {
+                    if (pointInTri(x, y, x1, y1, x2, y2, x3, y3)) dot(x, y, col);
                 }
             }
         }
-    }
 
-    private void fillTriangle(arc.graphics.Pixmap pix, int x1, int y1, int x2, int y2, int x3, int y3) {
-        int minX = Math.max(0, Math.min(x1, Math.min(x2, x3)));
-        int maxX = Math.min(31, Math.max(x1, Math.max(x2, x3)));
-        int minY = Math.max(0, Math.min(y1, Math.min(y2, y3)));
-        int maxY = Math.min(31, Math.max(y1, Math.max(y2, y3)));
+        void fillRect(int x, int y, int width, int height, int col) {
+            for (int yy = y; yy < y + height; yy++)
+                for (int xx = x; xx < x + width; xx++)
+                    set(xx, yy, col);
+        }
 
-        for (int y = minY; y <= maxY; y++) {
-            for (int x = minX; x <= maxX; x++) {
-                if (pointInTriangle(x, y, x1, y1, x2, y2, x3, y3)) {
-                    pix.drawPixel(x, y);
+        void drawRect(int x, int y, int width, int height, int col) {
+            for (int xx = x; xx < x + width; xx++) { set(xx, y, col); set(xx, y + height - 1, col); }
+            for (int yy = y; yy < y + height; yy++) { set(x, yy, col); set(x + width - 1, yy, col); }
+        }
+
+        void fillCircle(int cx, int cy, int r, int col) {
+            for (int y = Math.max(0, cy - r); y <= Math.min(h - 1, cy + r); y++) {
+                for (int x = Math.max(0, cx - r); x <= Math.min(w - 1, cx + r); x++) {
+                    int dx = x - cx, dy = y - cy;
+                    if (dx * dx + dy * dy <= r * r) set(x, y, col);
                 }
             }
         }
+
+        void drawCircle(int cx, int cy, int r, int col) {
+            int r2 = r * r;
+            for (int y = Math.max(0, cy - r - 1); y <= Math.min(h - 1, cy + r + 1); y++) {
+                for (int x = Math.max(0, cx - r - 1); x <= Math.min(w - 1, cx + r + 1); x++) {
+                    int dx = x - cx, dy = y - cy;
+                    int d = dx * dx + dy * dy;
+                    if (d >= r2 - r && d <= r2 + r) set(x, y, col);
+                }
+            }
+        }
+
+        void fillEllipse(int x, int y, int width, int height, int col) {
+            int xc = x + width / 2, yc = y + height / 2;
+            int a = width / 2, b = height / 2;
+            if (a <= 0 || b <= 0) return;
+            long a2 = (long) a * a, b2 = (long) b * b;
+            for (int yy = Math.max(0, y); yy <= Math.min(h - 1, y + height); yy++) {
+                for (int xx = Math.max(0, x); xx <= Math.min(w - 1, x + width); xx++) {
+                    long dx = xx - xc, dy = yy - yc;
+                    if (dx * dx * b2 + dy * dy * a2 <= a2 * b2) set(xx, yy, col);
+                }
+            }
+        }
+
+        private boolean pointInTri(int px, int py, int x1, int y1, int x2, int y2, int x3, int y3) {
+            int d1 = sign(px, py, x1, y1, x2, y2);
+            int d2 = sign(px, py, x2, y2, x3, y3);
+            int d3 = sign(px, py, x3, y3, x1, y1);
+            return ((d1 < 0) == (d2 < 0)) && ((d2 < 0) == (d3 < 0));
+        }
+        private int sign(int px, int py, int x1, int y1, int x2, int y2) {
+            return (px - x2) * (y1 - y2) - (x1 - x2) * (py - y2);
+        }
     }
 
-    private boolean pointInTriangle(int px, int py, int x1, int y1, int x2, int y2, int x3, int y3) {
-        int d1 = sign(px, py, x1, y1, x2, y2);
-        int d2 = sign(px, py, x2, y2, x3, y3);
-        int d3 = sign(px, py, x3, y3, x1, y1);
-        return ((d1 < 0) == (d2 < 0)) && ((d2 < 0) == (d3 < 0));
+    // ==================== 颜色工具 ====================
+
+    /** Color -> RGBA8888 int（与 Pixmap 的 RGBA8888 布局一致） */
+    static int rgba(Color c) {
+        int r = (int)(c.r * 255), g = (int)(c.g * 255), b = (int)(c.b * 255), a = (int)(c.a * 255);
+        return ((r & 0xFF) << 24) | ((g & 0xFF) << 16) | ((b & 0xFF) << 8) | (a & 0xFF);
     }
 
-    private int sign(int px, int py, int x1, int y1, int x2, int y2) {
-        return (px - x2) * (y1 - y2) - (x1 - x2) * (py - y2);
-    }
+    static int rgba(String hex) { return rgba(Color.valueOf(hex)); }
+    static int rgba(int hex) { return rgba(new Color(hex)); }
 
     // ==================== 贴图生成 ====================
 
-    private TextureRegion generateSprite(String name, int mainColor, int accentColor, boolean isFly) {
-        int size = 32;
-        arc.graphics.Pixmap pix = new arc.graphics.Pixmap(size, size);
-        Color bg = Color.valueOf("2a2a2a");
-        pix.setColor(bg.r, bg.g, bg.b, bg.a);
-        pix.fill();
-
-        Color mc = new Color(mainColor);
-        Color ac = new Color(accentColor);
-
-        if (isFly) {
-            pc(pix, mc);
-            fillTriangle(pix, 4, 28, 16, 4, 28, 28);
-            pc(pix, ac);
-            fillTriangle(pix, 10, 26, 16, 10, 22, 26);
-        } else {
-            pc(pix, mc);
-            pix.fillRect(4, 4, 24, 24);
-            pc(pix, ac);
-            pix.fillRect(10, 10, 12, 12);
-            if (!name.contains("factory")) {
-                Color gray = Color.valueOf("888888");
-                pc(pix, gray);
-                pix.drawRect(4, 4, 24, 24);
+    private TextureRegion makeRegion(String name, Raster r) {
+        // 用两参数构造函数（Arc 默认即为 RGBA8888，与官方 Pixmaps.scale/noise 一致），
+        // 再用稳定存在的 setRaw(x, y, rgba8888) 逐像素写入。
+        Pixmap pix = new Pixmap(S, S);
+        for (int y = 0; y < S; y++) {
+            for (int x = 0; x < S; x++) {
+                pix.setRaw(x, y, r.get(x, y));
             }
         }
-        pc(pix, ac);
-        pix.drawRect(0, 0, size - 1, size - 1);
-
-        TextureRegion region = new TextureRegion(new arc.graphics.Texture(pix));
+        TextureRegion region = new TextureRegion(new Texture(pix));
         Core.atlas.addRegion(name, region);
         pix.dispose();
         return region;
     }
 
+    private TextureRegion generateSprite(String name, int mainColor, int accentColor, boolean isFly) {
+        Raster r = new Raster();
+        r.fill(rgba("2a2a2a"));
+        int mc = rgba(mainColor), ac = rgba(accentColor);
+
+        if (isFly) {
+            r.fillTriangle(4, 28, 16, 4, 28, 28, mc);
+            r.fillTriangle(10, 26, 16, 10, 22, 26, ac);
+        } else {
+            r.fillRect(4, 4, 24, 24, mc);
+            r.fillRect(10, 10, 12, 12, ac);
+            if (!name.contains("factory")) {
+                r.drawRect(4, 4, 24, 24, rgba("888888"));
+            }
+        }
+        r.drawRect(0, 0, S, S, ac);
+        return makeRegion(name, r);
+    }
+
     private TextureRegion generateSpecialSprite(String name, int mainColor, int accentColor, int type) {
-        int size = 32;
-        arc.graphics.Pixmap pix = new arc.graphics.Pixmap(size, size);
-        Color bg = Color.valueOf("2a2a2a");
-        pix.setColor(bg.r, bg.g, bg.b, bg.a);
-        pix.fill();
-
-        Color mc = new Color(mainColor);
-        Color ac = new Color(accentColor);
-
-        pc(pix, mc);
+        Raster r = new Raster();
+        r.fill(rgba("2a2a2a"));
+        int mc = rgba(mainColor), ac = rgba(accentColor);
 
         switch (type) {
             case 0:
-                fillTriangle(pix, 2, 30, 16, 4, 30, 30);
-                pix.fillRect(2, 20, 28, 10);
-                pc(pix, ac);
-                pix.fillRect(12, 8, 8, 12);
+                r.fillTriangle(2, 30, 16, 4, 30, 30, mc);
+                r.fillRect(2, 20, 28, 10, mc);
+                r.fillRect(12, 8, 8, 12, ac);
                 break;
             case 1:
-                pix.fillRect(2, 2, 28, 28);
-                pc(pix, ac);
-                pix.fillRect(8, 8, 16, 16);
-                Color gray1 = Color.valueOf("AAAAAA");
-                pc(pix, gray1);
-                fillTriangle(pix, 14, 4, 18, 4, 16, 12);
+                r.fillRect(2, 2, 28, 28, mc);
+                r.fillRect(8, 8, 16, 16, ac);
+                r.fillTriangle(14, 4, 18, 4, 16, 12, rgba("AAAAAA"));
                 break;
             case 2:
-                pix.fillCircle(16, 16, 14);
-                pc(pix, ac);
-                pix.fillRect(13, 6, 6, 20);
-                pix.fillRect(6, 13, 20, 6);
+                r.fillCircle(16, 16, 14, mc);
+                r.fillRect(13, 6, 6, 20, ac);
+                r.fillRect(6, 13, 20, 6, ac);
                 break;
             case 3:
-                pix.fillRect(2, 8, 28, 16);
-                pc(pix, ac);
-                pix.fillRect(8, 2, 16, 8);
-                pix.fillRect(22, 0, 8, 6);
-                Color red1 = Color.valueOf("FF5555");
-                pc(pix, red1);
-                pix.fillRect(28, 1, 4, 4);
+                r.fillRect(2, 8, 28, 16, mc);
+                r.fillRect(8, 2, 16, 8, ac);
+                r.fillRect(22, 0, 8, 6, ac);
+                r.fillRect(28, 1, 4, 4, rgba("FF5555"));
                 break;
             case 4:
-                pix.fillCircle(16, 16, 12);
-                pc(pix, ac);
-                pix.fillRect(14, 4, 4, 24);
-                pix.fillRect(4, 14, 24, 4);
+                r.fillCircle(16, 16, 12, mc);
+                r.fillRect(14, 4, 4, 24, ac);
+                r.fillRect(4, 14, 24, 4, ac);
                 break;
             case 5:
-                fillTriangle(pix, 16, 2, 30, 16, 16, 30);
-                fillTriangle(pix, 16, 2, 2, 16, 16, 30);
-                pc(pix, ac);
-                pix.fillCircle(16, 16, 4);
+                r.fillTriangle(16, 2, 30, 16, 16, 30, mc);
+                r.fillTriangle(16, 2, 2, 16, 16, 30, mc);
+                r.fillCircle(16, 16, 4, ac);
                 break;
             case 6:
-                pix.fillCircle(16, 16, 14);
-                pc(pix, ac);
-                pix.fillCircle(16, 16, 8);
-                Color red2 = Color.valueOf("FF0000");
-                pc(pix, red2);
-                pix.fillCircle(10, 12, 3);
-                pix.fillCircle(22, 12, 3);
-                pix.fillRect(14, 18, 4, 2);
+                r.fillCircle(16, 16, 14, mc);
+                r.fillCircle(16, 16, 8, ac);
+                r.fillCircle(10, 12, 3, rgba("FF0000"));
+                r.fillCircle(22, 12, 3, rgba("FF0000"));
+                r.fillRect(14, 18, 4, 2, rgba("FF0000"));
                 break;
             case 7:
-                fillEllipse(pix, 4, 8, 24, 16);
-                pc(pix, ac);
-                pix.fillRect(0, 14, 6, 4);
-                pix.fillRect(26, 14, 6, 4);
-                pc(pix, mc);
-                pix.fillRect(14, 12, 4, 8);
+                r.fillEllipse(4, 8, 24, 16, mc);
+                r.fillRect(0, 14, 6, 4, ac);
+                r.fillRect(26, 14, 6, 4, ac);
+                r.fillRect(14, 12, 4, 8, mc);
                 break;
             case 8:
-                pix.fillRect(2, 6, 28, 20);
-                pc(pix, ac);
-                pix.fillRect(6, 10, 20, 12);
-                Color yellow1 = Color.valueOf("FFCC00");
-                pc(pix, yellow1);
-                pix.fillRect(4, 8, 4, 4);
-                pix.fillRect(24, 8, 4, 4);
+                r.fillRect(2, 6, 28, 20, mc);
+                r.fillRect(6, 10, 20, 12, ac);
+                r.fillRect(4, 8, 4, 4, rgba("FFCC00"));
+                r.fillRect(24, 8, 4, 4, rgba("FFCC00"));
                 break;
             case 9:
-                pix.fillCircle(16, 18, 10);
-                pc(pix, ac);
-                fillTriangle(pix, 16, 2, 20, 8, 12, 8);
-                pix.fillRect(14, 8, 4, 16);
-                Color red3 = Color.valueOf("FF0000");
-                pc(pix, red3);
-                pix.fillCircle(12, 16, 2);
-                pix.fillCircle(20, 16, 2);
+                r.fillCircle(16, 18, 10, mc);
+                r.fillTriangle(16, 2, 20, 8, 12, 8, ac);
+                r.fillRect(14, 8, 4, 16, ac);
+                r.fillCircle(12, 16, 2, rgba("FF0000"));
+                r.fillCircle(20, 16, 2, rgba("FF0000"));
                 break;
             case 10:
-                pix.fillRect(4, 12, 24, 8);
-                pc(pix, ac);
-                pix.fillRect(14, 2, 4, 20);
-                pix.fillRect(2, 14, 28, 4);
-                Color red4 = Color.valueOf("FF0000");
-                pc(pix, red4);
-                pix.fillCircle(16, 16, 2);
-                pix.fillRect(28, 14, 4, 4);
+                r.fillRect(4, 12, 24, 8, mc);
+                r.fillRect(14, 2, 4, 20, ac);
+                r.fillRect(2, 14, 28, 4, ac);
+                r.fillCircle(16, 16, 2, rgba("FF0000"));
+                r.fillRect(28, 14, 4, 4, rgba("FF0000"));
                 break;
             case 11:
-                pix.fillCircle(16, 16, 14);
-                pc(pix, ac);
-                fillTriangle(pix, 16, 4, 24, 10, 24, 22);
-                fillTriangle(pix, 16, 4, 8, 10, 8, 22);
-                Color orange1 = Color.valueOf("FFAA00");
-                pc(pix, orange1);
+                r.fillCircle(16, 16, 14, mc);
+                r.fillTriangle(16, 4, 24, 10, 24, 22, ac);
+                r.fillTriangle(16, 4, 8, 10, 8, 22, ac);
                 for (int i = 0; i < 5; i++) {
                     int cx = 10 + (i % 3) * 6;
                     int cy = 8 + (i / 3) * 8;
-                    pix.fillCircle(cx, cy, 2);
+                    r.fillCircle(cx, cy, 2, rgba("FFAA00"));
                 }
                 break;
             case 12:
-                pix.fillRect(4, 4, 12, 24);
-                pc(pix, ac);
-                pix.fillRect(6, 6, 8, 20);
-                Color gray2 = Color.valueOf("CCCCCC");
-                pc(pix, gray2);
-                pix.fillRect(20, 8, 4, 16);
-                fillTriangle(pix, 18, 8, 26, 8, 22, 2);
-                pix.fillRect(18, 24, 8, 4);
+                r.fillRect(4, 4, 12, 24, mc);
+                r.fillRect(6, 6, 8, 20, ac);
+                r.fillRect(20, 8, 4, 16, rgba("CCCCCC"));
+                r.fillTriangle(18, 8, 26, 8, 22, 2, rgba("CCCCCC"));
+                r.fillRect(18, 24, 8, 4, rgba("CCCCCC"));
                 break;
             case 13:
-                pix.fillRect(2, 12, 28, 8);
-                pc(pix, ac);
-                pix.fillRect(26, 10, 6, 12);
-                Color cyan1 = Color.valueOf("00FFFF");
-                pc(pix, cyan1);
-                pix.fillCircle(16, 16, 4);
-                pix.fillRect(6, 14, 8, 4);
+                r.fillRect(2, 12, 28, 8, mc);
+                r.fillRect(26, 10, 6, 12, ac);
+                r.fillCircle(16, 16, 4, rgba("00FFFF"));
+                r.fillRect(6, 14, 8, 4, rgba("00FFFF"));
                 break;
             case 14:
-                pix.fillCircle(16, 16, 12);
-                pc(pix, ac);
-                fillTriangle(pix, 16, 2, 22, 10, 10, 10);
-                Color orange2 = Color.valueOf("FF5500");
-                pc(pix, orange2);
+                r.fillCircle(16, 16, 12, mc);
+                r.fillTriangle(16, 2, 22, 10, 10, 10, ac);
                 for (int i = 0; i < 6; i++) {
                     float angle = i * 60f + 30;
                     int cx = (int)(16 + 14 * Math.cos(angle * Math.PI / 180));
                     int cy = (int)(16 + 14 * Math.sin(angle * Math.PI / 180));
-                    pix.fillCircle(cx, cy, 2);
+                    r.fillCircle(cx, cy, 2, rgba("FF5500"));
                 }
                 break;
             case 15:
-                pix.fillCircle(16, 16, 14);
-                pc(pix, ac);
-                pix.fillCircle(16, 16, 10);
-                Color blue1 = Color.valueOf("88CCFF");
-                pc(pix, blue1);
-                pix.drawCircle(16, 16, 6);
-                pix.drawCircle(16, 16, 10);
+                r.fillCircle(16, 16, 14, mc);
+                r.fillCircle(16, 16, 10, ac);
+                r.drawCircle(16, 16, 6, rgba("88CCFF"));
+                r.drawCircle(16, 16, 10, rgba("88CCFF"));
                 break;
             case 16:
-                pix.fillRect(2, 8, 28, 20);
-                pc(pix, ac);
-                fillTriangle(pix, 4, 8, 8, 2, 12, 8);
-                fillTriangle(pix, 12, 8, 16, 2, 20, 8);
-                fillTriangle(pix, 20, 8, 24, 2, 28, 8);
-                pix.fillRect(6, 14, 20, 4);
-                pix.fillRect(10, 18, 12, 6);
+                r.fillRect(2, 8, 28, 20, mc);
+                r.fillTriangle(4, 8, 8, 2, 12, 8, ac);
+                r.fillTriangle(12, 8, 16, 2, 20, 8, ac);
+                r.fillTriangle(20, 8, 24, 2, 28, 8, ac);
+                r.fillRect(6, 14, 20, 4, ac);
+                r.fillRect(10, 18, 12, 6, ac);
                 break;
             case 17:
-                pix.fillCircle(16, 16, 14);
-                pc(pix, ac);
-                pix.drawCircle(16, 16, 10);
-                pix.drawCircle(16, 16, 6);
-                Color green1 = Color.valueOf("00FFAA");
-                pc(pix, green1);
-                pix.fillCircle(16, 16, 3);
+                r.fillCircle(16, 16, 14, mc);
+                r.drawCircle(16, 16, 10, ac);
+                r.drawCircle(16, 16, 6, ac);
+                r.fillCircle(16, 16, 3, rgba("00FFAA"));
                 for (int i = 0; i < 8; i++) {
                     float angle = i * 45f;
                     int cx = (int)(16 + 12 * Math.cos(angle * Math.PI / 180));
                     int cy = (int)(16 + 12 * Math.sin(angle * Math.PI / 180));
-                    pix.fillCircle(cx, cy, 2);
+                    r.fillCircle(cx, cy, 2, rgba("00FFAA"));
                 }
                 break;
         }
-
-        pc(pix, ac);
-        pix.drawRect(0, 0, size - 1, size - 1);
-        TextureRegion region = new TextureRegion(new arc.graphics.Texture(pix));
-        Core.atlas.addRegion(name, region);
-        pix.dispose();
-        return region;
+        r.drawRect(0, 0, S, S, ac);
+        return makeRegion(name, r);
     }
 
     // ==================== 单位注册 ====================
