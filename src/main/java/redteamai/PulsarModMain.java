@@ -6,10 +6,12 @@ import arc.graphics.g2d.Draw;
 import arc.graphics.g2d.Fill;
 import arc.graphics.g2d.Lines;
 import arc.math.Angles;
+import arc.math.Interp;
 import arc.math.Mathf;
 import arc.struct.Seq;
 import arc.util.Log;
 import arc.util.Time;
+import mindustry.entities.effect.WaveEffect;
 import mindustry.gen.Building;
 import mindustry.gen.Groups;
 import mindustry.gen.Unit;
@@ -21,6 +23,30 @@ import mindustry.world.blocks.defense.ShieldWall;
 public class PulsarModMain extends Mod {
 
     public static boolean DEBUG = false;
+
+    static final WaveEffect shockRing = new WaveEffect();
+    static {
+        shockRing.lifetime = 48f;
+        shockRing.sizeFrom = 4f;
+        shockRing.sizeTo = 10000f;
+        shockRing.strokeFrom = 16f;
+        shockRing.strokeTo = 1.5f;
+        shockRing.colorFrom = Color.valueOf("00e5ff");
+        shockRing.colorTo = Color.valueOf("004466");
+        shockRing.interp = Interp.pow3Out;
+    }
+
+    static final WaveEffect sparkFx = new WaveEffect();
+    static {
+        sparkFx.lifetime = 12f;
+        sparkFx.sizeFrom = 2f;
+        sparkFx.sizeTo = 22f;
+        sparkFx.strokeFrom = 3f;
+        sparkFx.strokeTo = 0.5f;
+        sparkFx.colorFrom = Color.valueOf("ffffff");
+        sparkFx.colorTo = Color.valueOf("00e5ff");
+        sparkFx.interp = Interp.pow2Out;
+    }
 
     @Override
     public void loadContent() {
@@ -297,17 +323,12 @@ public class PulsarModMain extends Mod {
     }
 
     public static class ShockwaveUnitType extends UnitType {
-        private final Color ringColor = Color.valueOf("00e5ff");
+        private final Color coreColor = Color.valueOf("00e5ff");
         private final float baseRadius = 22f;
         private final float shockwaveInterval = 20f * 60f;
-        private final float shockwaveMaxRadius = 10000f;
-        private final float shockwaveSpeed = 250f;
-        private final float shockwaveThickness = 12f;
         private float shockwaveTimer = 0f;
-        private float shockwaveRadius = -1f;
-        private Seq<Building> hitShields = new Seq<>();
-        private float lastSparkX, lastSparkY, lastSparkTime;
-        private static final float SPARK_LIFETIME = 20f;
+        private boolean firing = false;
+        private Seq<ShieldWall.ShieldWallBuild> consumedShields = new Seq<>();
 
         public ShockwaveUnitType(String name) {
             super(name);
@@ -321,61 +342,69 @@ public class PulsarModMain extends Mod {
         public void update(Unit unit) {
             unit.health = health;
             shockwaveTimer += Time.delta;
-            if (shockwaveRadius < 0f && shockwaveTimer >= shockwaveInterval) {
-                shockwaveRadius = unit.hitSize;
-                shockwaveTimer = 0f;
-                hitShields.clear();
-                if (DEBUG) Log.info("[PulsarMod] 冲击波星释放全图冲击波！");
+            float timeToNext = shockwaveInterval - shockwaveTimer;
+
+            if (!firing && timeToNext <= 3f * 60f) {
+                firing = true;
             }
-            if (shockwaveRadius >= 0f) {
-                float prevRadius = shockwaveRadius;
-                shockwaveRadius += shockwaveSpeed * (Time.delta / 60f);
-                for (Unit u : Groups.unit) {
-                    if (u == null || u.dead || u.team == unit.team) continue;
-                    if (u.type instanceof YellowDwarfUnitType || u.type instanceof BluePulsarUnitType ||
-                        u.type instanceof BlackHoleUnitType || u.type instanceof ShockwaveUnitType) continue;
-                    float dst = Mathf.dst(unit.x, unit.y, u.x, u.y);
-                    if (dst >= prevRadius && dst <= shockwaveRadius + shockwaveThickness) {
-                        if (!isBlockedByShield(unit.x, unit.y, u.x, u.y)) {
-                            lastSparkX = u.x; lastSparkY = u.y; lastSparkTime = Time.time;
-                            u.remove();
-                        }
-                    }
+
+            if (firing && timeToNext <= 0f) {
+                shockRing.at(unit.x, unit.y);
+                if (DEBUG) Log.info("[PulsarMod] 冲击波星释放全图冲击波！");
+                consumedShields.clear();
+                shockEverything(unit);
+                firing = false;
+                shockwaveTimer = 0f;
+            }
+        }
+
+        private void shockEverything(Unit source) {
+            for (Unit u : Groups.unit) {
+                if (u == null || u.dead || u.team == source.team) continue;
+                if (u.type instanceof YellowDwarfUnitType || u.type instanceof BluePulsarUnitType ||
+                    u.type instanceof BlackHoleUnitType || u.type instanceof ShockwaveUnitType) continue;
+                if (!isBlockedByShield(source.x, source.y, u.x, u.y)) {
+                    sparkFx.at(u.x, u.y);
+                    u.remove();
                 }
-                for (Building b : Groups.build) {
-                    if (b == null || !b.isValid() || b.team == unit.team) continue;
-                    float dst = Mathf.dst(unit.x, unit.y, b.x, b.y);
-                    if (dst >= prevRadius && dst <= shockwaveRadius + shockwaveThickness) {
-                        if (!isBlockedByShield(unit.x, unit.y, b.x, b.y)) {
-                            lastSparkX = b.x; lastSparkY = b.y; lastSparkTime = Time.time;
-                            b.kill();
-                        }
-                    }
+            }
+            for (Building b : Groups.build) {
+                if (b == null || !b.isValid() || b.team == source.team) continue;
+                if (!isBlockedByShield(source.x, source.y, b.x, b.y)) {
+                    sparkFx.at(b.x, b.y);
+                    b.kill();
                 }
-                if (shockwaveRadius > shockwaveMaxRadius) shockwaveRadius = -1f;
             }
         }
 
         private boolean isBlockedByShield(float sx, float sy, float tx, float ty) {
             for (Building b : Groups.build) {
                 if (b == null || !b.isValid()) continue;
-                boolean isShield = b instanceof ShieldWall.ShieldWallBuild;
-                if (!isShield) {
-                    String bn = b.block.name.toLowerCase();
-                    isShield = bn.contains("shield") || bn.contains("force") ||
-                               bn.contains("力墙") || bn.contains("防护");
+                ShieldWall.ShieldWallBuild shield = null;
+                if (b instanceof ShieldWall.ShieldWallBuild) {
+                    shield = (ShieldWall.ShieldWallBuild) b;
                 }
-                if (isShield) {
-                    if (hitShields.contains(b)) continue;
-                    float dist = distanceToSegment(b.x, b.y, sx, sy, tx, ty);
-                    float size = b.block.size * 4f;
-                    if (dist <= size + shockwaveThickness) {
+                if (shield == null) {
+                    String bn = b.block.name.toLowerCase();
+                    if (!(bn.contains("shield") || bn.contains("force") ||
+                          bn.contains("力墙") || bn.contains("防护"))) continue;
+                }
+                if (consumedShields.contains(shield)) return true;
+                float shieldR = shield != null ? shield.shieldRadius : 60f;
+                float dist = distanceToSegment(shield != null ? shield.x : b.x,
+                                               shield != null ? shield.y : b.y,
+                                               sx, sy, tx, ty);
+                if (dist <= shieldR) {
+                    if (shield != null) {
+                        shield.shield -= 200f;
+                        if (shield.shield <= 0f) shield.breakTimer = 1f;
+                        consumedShields.add(shield);
+                    } else {
                         b.damage(200f);
-                        hitShields.add(b);
-                        lastSparkX = b.x; lastSparkY = b.y; lastSparkTime = Time.time;
-                        if (DEBUG) Log.info("[PulsarMod] 力墙挡下冲击波！");
-                        return true;
                     }
+                    sparkFx.at(b.x, b.y);
+                    if (DEBUG) Log.info("[PulsarMod] 力墙挡下冲击波！");
+                    return true;
                 }
             }
             return false;
@@ -385,58 +414,24 @@ public class PulsarModMain extends Mod {
         public void draw(Unit unit) {
             Draw.reset();
             float x = unit.x, y = unit.y, time = Time.time;
-
-            if (Time.time - lastSparkTime < SPARK_LIFETIME) {
-                float age = Time.time - lastSparkTime;
-                float p = age / SPARK_LIFETIME;
-                Draw.z(150f);
-                Draw.color(ringColor, 1f - p);
-                for (int i = 0; i < 10; i++) {
-                    float a = Mathf.random(360f);
-                    float d = p * 25f;
-                    Fill.circle(lastSparkX + Angles.trnsx(a, d),
-                                lastSparkY + Angles.trnsy(a, d),
-                                (1f - p) * 4f);
-                }
-                Draw.reset();
-            }
-
             float timeToNext = shockwaveInterval - shockwaveTimer;
-            if (timeToNext <= 3f * 60f && shockwaveRadius < 0f) {
+
+            if (!firing && timeToNext <= 3f * 60f) {
                 float p = 1f - (timeToNext / (3f * 60f));
                 Draw.z(111f);
-                Draw.color(ringColor, 0.3f + p * 0.5f);
-                Lines.stroke(2f);
-                Lines.circle(x, y, baseRadius * (1f + p * 1.5f) + Mathf.sin(time * 10f) * 2f);
-            }
-
-            if (shockwaveRadius >= 0f) {
-                Draw.z(130f);
-                float alpha = 0.5f * (1f - shockwaveRadius / shockwaveMaxRadius);
-                Draw.color(ringColor, alpha * 2f);
-                Lines.stroke(shockwaveThickness);
-                Lines.circle(x, y, shockwaveRadius);
-                Draw.color(Color.white, alpha * 1.5f);
-                Lines.stroke(3f + Mathf.sin(time * 10f) * 2f);
-                Lines.circle(x, y, shockwaveRadius);
-                for (int i = 0; i < 48; i++) {
-                    float a = time * 3f + i * 7.5f;
-                    float px = x + Angles.trnsx(a, shockwaveRadius);
-                    float py = y + Angles.trnsy(a, shockwaveRadius);
-                    Draw.color(ringColor, alpha * 2f);
-                    Fill.circle(px, py, 3f + Mathf.sin(time * 5f + i) * 2f);
-                }
-                Draw.reset();
+                Draw.color(coreColor, 0.3f + p * 0.5f);
+                Fill.circle(x, y, baseRadius * (1f + p * 1.5f) + Mathf.sin(time * 10f) * 2f);
             }
 
             Draw.z(110f);
-            Draw.color(ringColor);
+            Draw.color(coreColor);
             Fill.circle(x, y, baseRadius * 1.5f);
             Fill.circle(x, y, baseRadius * 0.5f);
-            Draw.color(Color.white, ringColor, 0.5f + Mathf.sin(time, 8f, 0.5f));
+            Draw.color(Color.white, coreColor, 0.5f + Mathf.sin(time, 8f, 0.5f));
             Fill.circle(x, y, baseRadius * 0.8f);
 
             Draw.reset();
+            Brush: ;
             Draw.z(0f);
         }
 
