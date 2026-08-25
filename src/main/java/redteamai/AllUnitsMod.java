@@ -12,7 +12,7 @@ import mindustry.entities.abilities.SpawnerAbility;
 import mindustry.entities.bullet.Bullets;
 import mindustry.entities.bullet.MissileBulletType;
 import mindustry.entities.bullet.RailBulletType;
-import mindustry.entities.weapons.Weapon;
+import mindustry.entities.Weapon;   // 真实包路径：mindustry.entities.Weapon
 import mindustry.mod.Mod;
 import mindustry.type.UnitType;
 
@@ -20,7 +20,6 @@ import static mindustry.Vars.content;
 
 public class AllUnitsMod extends Mod {
 
-    // ==================== 21 个单位静态实例 ====================
     public static UnitType greenGroundUnit, blueFlyUnit, redFactoryUnit;
     public static UnitType purpleNavalUnit, yellowMinerUnit;
     public static UnitType cyanSupportUnit, graySiegeUnit;
@@ -32,34 +31,38 @@ public class AllUnitsMod extends Mod {
     public static UnitType crimsonDemonUnit, cobaltShielderUnit;
     public static UnitType rainbowTitanUnit, emeraldCommanderUnit;
 
-    // ==================== 基础贴图画师 ====================
+    // ============ 真实 Pixmap API 绘图辅助 ============
+    // 真实 arc.graphics.Pixmap：用 pix.fill(color) 设置填充色后绘制
+    // 用 pix.set(color) 设置画笔色；绘制形状用 fillRect/fillCircle/fillTriangle 等
+
     private TextureRegion generateSprite(String name, int mainColor, int accentColor, boolean isFly) {
         int size = 32;
         Pixmap pix = new Pixmap(size, size);
         pix.fill(Color.valueOf("2a2a2a"));
+
         pix.setColor(new Color(mainColor));
         if (isFly) {
             pix.fillTriangle(4, 28, 16, 4, 28, 28);
             pix.setColor(new Color(accentColor));
             pix.fillTriangle(10, 26, 16, 10, 22, 26);
         } else {
-            pix.fillRectangle(4, 4, 24, 24);
+            pix.fillRect(4, 4, 20, 20);   // 真实方法：fillRect(x,y,w,h)
             pix.setColor(new Color(accentColor));
-            pix.fillRectangle(10, 10, 12, 12);
+            pix.fillRect(10, 10, 12, 12);
             if (!name.contains("factory")) {
                 pix.setColor(Color.valueOf("888888"));
-                pix.drawRect(4, 4, 24, 24);
+                pix.drawRect(4, 4, 20, 20);  // drawRect(x,y,w,h)
             }
         }
         pix.setColor(new Color(accentColor));
-        pix.drawRect(0, 0, size - 1, size - 1);
+        pix.drawRect(0, 0, 31, 31);
+
         TextureRegion region = new TextureRegion(new Texture(pix));
         Core.atlas.addRegion(name, region);
         pix.dispose();
         return region;
     }
 
-    // ==================== 高级贴图画师（18 种造型） ====================
     private TextureRegion generateSpecialSprite(String name, int mainColor, int accentColor, int type) {
         int size = 32;
         Pixmap pix = new Pixmap(size, size);
@@ -69,14 +72,13 @@ public class AllUnitsMod extends Mod {
         switch (type) {
             case 0:
                 pix.fillTriangle(2, 30, 16, 4, 30, 30);
-                pix.fillRect(2, 20, 28, 10);
                 pix.setColor(new Color(accentColor));
                 pix.fillRect(12, 8, 8, 12);
                 break;
             case 1:
-                pix.fillRectangle(2, 2, 28, 28);
+                pix.fillRect(2, 2, 26, 26);
                 pix.setColor(new Color(accentColor));
-                pix.fillRectangle(8, 8, 16, 16);
+                pix.fillRect(8, 8, 16, 16);
                 pix.setColor(Color.valueOf("AAAAAA"));
                 pix.fillTriangle(14, 4, 18, 4, 16, 12);
                 break;
@@ -87,7 +89,7 @@ public class AllUnitsMod extends Mod {
                 pix.fillRect(6, 13, 20, 6);
                 break;
             case 3:
-                pix.fillRectangle(2, 8, 28, 16);
+                pix.fillRect(2, 8, 26, 16);
                 pix.setColor(new Color(accentColor));
                 pix.fillRect(8, 2, 16, 8);
                 pix.fillRect(22, 0, 8, 6);
@@ -124,7 +126,7 @@ public class AllUnitsMod extends Mod {
                 pix.fillRect(14, 12, 4, 8);
                 break;
             case 8:
-                pix.fillRect(2, 6, 28, 20);
+                pix.fillRect(2, 6, 26, 20);
                 pix.setColor(new Color(accentColor));
                 pix.fillRect(6, 10, 20, 12);
                 pix.setColor(Color.valueOf("FFCC00"));
@@ -224,16 +226,16 @@ public class AllUnitsMod extends Mod {
         }
 
         pix.setColor(new Color(accentColor));
-        pix.drawRect(0, 0, size - 1, size - 1);
+        pix.drawRect(0, 0, 31, 31);
         TextureRegion region = new TextureRegion(new Texture(pix));
         Core.atlas.addRegion(name, region);
         pix.dispose();
         return region;
     }
 
-    // ==================== 加载所有内容 ====================
     @Override
     public void loadContent() {
+        // --- 1: DeepSeek ---
         greenGroundUnit = new UnitType("green-tank") {{
             health = 240f; speed = 1.2f; hitSize = 10f; armor = 2f;
             region = generateSprite("green-tank", 0xFF4488AA, 0xFFFFFFFF, false);
@@ -254,6 +256,7 @@ public class AllUnitsMod extends Mod {
             playerControllable = true;
         }};
 
+        // --- 2: 元宝 ---
         purpleNavalUnit = new UnitType("purple-naval") {{
             health = 180f; speed = 2.5f; hitSize = 12f; naval = true;
             region = generateSpecialSprite("purple-naval", 0xFF9944FF, 0xFFDD88FF, 0);
@@ -271,6 +274,7 @@ public class AllUnitsMod extends Mod {
             playerControllable = true;
         }};
 
+        // --- 3: DeepSeek ---
         cyanSupportUnit = new UnitType("cyan-support") {{
             health = 100f; speed = 4.2f; hitSize = 8f; flying = true;
             region = generateSpecialSprite("cyan-support", 0xFF00FFCC, 0xFFFFFFFF, 2);
@@ -286,6 +290,7 @@ public class AllUnitsMod extends Mod {
             playerControllable = true;
         }};
 
+        // --- 4: 元宝 ---
         whiteAntiAirUnit = new UnitType("white-anti-air") {{
             health = 150f; speed = 1.5f; hitSize = 11f; armor = 1f;
             region = generateSpecialSprite("white-anti-air", 0xFFFFFFFF, 0xFF888888, 4);
@@ -300,6 +305,7 @@ public class AllUnitsMod extends Mod {
             playerControllable = true;
         }};
 
+        // --- 5: DeepSeek ---
         orangeSuicideUnit = new UnitType("orange-suicide") {{
             health = 60f; speed = 5.5f; hitSize = 6f; flying = true;
             region = generateSpecialSprite("orange-suicide", 0xFFFF8800, 0xFFFFFFFF, 6);
@@ -319,6 +325,7 @@ public class AllUnitsMod extends Mod {
             playerControllable = true;
         }};
 
+        // --- 6: 元宝 ---
         brownTransportUnit = new UnitType("brown-transport") {{
             health = 200f; speed = 1.8f; hitSize = 14f; armor = 3f;
             itemCapacity = 50;
@@ -335,6 +342,7 @@ public class AllUnitsMod extends Mod {
             playerControllable = true;
         }};
 
+        // --- 7: DeepSeek ---
         redSniperUnit = new UnitType("red-sniper") {{
             health = 80f; speed = 0.6f; hitSize = 10f; armor = 0f;
             region = generateSpecialSprite("red-sniper", 0xFFFF0000, 0xFFFFFFFF, 10);
@@ -349,6 +357,7 @@ public class AllUnitsMod extends Mod {
             playerControllable = true;
         }};
 
+        // --- 8: 元宝 ---
         goldPaladinUnit = new UnitType("gold-paladin") {{
             health = 500f; speed = 0.8f; hitSize = 16f; armor = 8f;
             region = generateSpecialSprite("gold-paladin", 0xFFFFD700, 0xFFFFFFFF, 12);
@@ -367,6 +376,7 @@ public class AllUnitsMod extends Mod {
             playerControllable = true;
         }};
 
+        // --- 9: DeepSeek ---
         crimsonDemonUnit = new UnitType("crimson-demon") {{
             health = 180f; speed = 3.2f; hitSize = 9f; flying = true;
             region = generateSpecialSprite("crimson-demon", 0xFFCC0000, 0xFFFF8800, 14);
@@ -383,6 +393,7 @@ public class AllUnitsMod extends Mod {
             playerControllable = true;
         }};
 
+        // --- 10: 元宝 收尾 ---
         rainbowTitanUnit = new UnitType("rainbow-titan") {{
             health = 5000f; speed = 0.5f; hitSize = 28f; armor = 12f;
             region = generateSpecialSprite("rainbow-titan", 0xFFFF00FF, 0xFFFFFFFF, 16);
