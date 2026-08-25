@@ -282,7 +282,7 @@ public class PulsarModMain extends Mod {
                 float flicker = (Mathf.sin(time * 8f + i * 0.9f) + 1f) / 2f;
                 float alpha = (0.7f + flicker * 0.3f) * (1f - t * 0.6f);
                 float size = (2.0f - t * 1.3f) + Mathf.sin(time * 6f + i) * 0.3f;
-                size = Mathf.max(size, 0.3f);
+                size = Math.max(size, 0.3f);
                 Draw.color(c, alpha); Fill.circle(px, py, size);
             }
             Mathf.rand.setSeed(0);
