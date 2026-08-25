@@ -10,7 +10,7 @@ import arc.math.Mathf;
 import arc.struct.Seq;
 import arc.util.Log;
 import arc.util.Time;
-import mindustry.content.StatusEffects;
+import mindustry.entities.Units;
 import mindustry.gen.Groups;
 import mindustry.gen.Unit;
 import mindustry.gen.UnitEntity;
@@ -23,16 +23,14 @@ public class PulsarModMain extends Mod {
 
     public static boolean DEBUG = false;
 
-    // ============ 定义官方无限状态 ============
     public static StatusEffect invincible;
 
     @Override
     public void loadContent() {
-        // 初始化无限状态效果
         invincible = new StatusEffect("pulsar-invincible") {
             {
                 healthMultiplier = Float.POSITIVE_INFINITY;
-                show = false; // 不在HUD上显示
+                show = false;
                 damageMultiplier = 1f;
             }
         };
@@ -45,7 +43,7 @@ public class PulsarModMain extends Mod {
     }
 
     // ====================================================================
-    //  黄矮星：脉动光球 + 吸入100万伤害（独有），无射线
+    //  黄矮星
     // ====================================================================
     public static class YellowDwarfUnitType extends UnitType {
 
@@ -72,7 +70,6 @@ public class PulsarModMain extends Mod {
 
         @Override
         public void update(Unit unit) {
-            // ✅ 套用官方无限状态（持续5秒，每帧调用相当于永久）
             unit.apply(invincible, 5f);
 
             for (Unit u : Groups.unit) {
@@ -91,7 +88,6 @@ public class PulsarModMain extends Mod {
             }
         }
 
-        // ... draw 方法不变，省略 ...
         @Override
         public void draw(Unit unit) {
             Draw.reset();
@@ -125,7 +121,7 @@ public class PulsarModMain extends Mod {
     }
 
     // ====================================================================
-    //  中子星：左右快摆动，射线1000长，本体缩小
+    //  中子星
     // ====================================================================
     public static class BluePulsarUnitType extends UnitType {
 
@@ -159,7 +155,6 @@ public class PulsarModMain extends Mod {
 
         @Override
         public void update(Unit unit) {
-            // ✅ 套用官方无限状态
             unit.apply(invincible, 5f);
 
             float swing = Mathf.sin(Time.time, 25f, 8f);
@@ -191,7 +186,6 @@ public class PulsarModMain extends Mod {
             }
         }
 
-        // ... draw 和 distanceToSegment 方法不变 ...
         @Override
         public void draw(Unit unit) {
             Draw.reset();
@@ -258,7 +252,7 @@ public class PulsarModMain extends Mod {
     }
 
     // ====================================================================
-    //  黑洞：吸引范围加大，射线加长到220，本体缩小
+    //  黑洞：吞噬范围内对所有单位无差别湮灭
     // ====================================================================
     public static class BlackHoleUnitType extends UnitType {
 
@@ -299,7 +293,6 @@ public class PulsarModMain extends Mod {
 
         @Override
         public void update(Unit unit) {
-            // ✅ 套用官方无限状态
             unit.apply(invincible, 5f);
 
             float swing = Mathf.sin(Time.time, 40f, 6f);
@@ -324,14 +317,14 @@ public class PulsarModMain extends Mod {
                     u.x -= Angles.trnsx(angle, gravityStrength);
                     u.y -= Angles.trnsy(angle, gravityStrength);
                 }
+                // ✅ 对所有单位无差别湮灭
                 if (dst <= unit.hitSize + u.hitSize + 5f) {
-                    if (DEBUG) Log.info("[PulsarMod] 黑洞吞噬 " + u.type);
-                    u.kill();
+                    if (DEBUG) Log.info("[PulsarMod] 黑洞湮灭 " + u.type);
+                    Units.unitDestroy(u.id);
                 }
             }
         }
 
-        // ... draw、drawBlackHoleJets、drawAccretionDisk、distanceToSegment 方法不变 ...
         @Override
         public void draw(Unit unit) {
             Draw.reset();
