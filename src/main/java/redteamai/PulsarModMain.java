@@ -10,7 +10,7 @@ import arc.math.Mathf;
 import arc.struct.Seq;
 import arc.util.Log;
 import arc.util.Time;
-import mindustry.effects.FxC;
+import mindustry.effects.Fx;
 import mindustry.gen.Building;
 import mindustry.gen.Groups;
 import mindustry.gen.Unit;
@@ -49,11 +49,8 @@ public class PulsarModMain extends Mod {
     public static class YellowDwarfUnitType extends UnitType {
         private final Color coreColor = Color.valueOf("ffd37f");
         private final Color outerColor = Color.valueOf("ff9d00");
-        private final float pulseSpeed = 40f;
-        private final float baseRadius = 22f;
-        private final float gravityRange = 150f;
-        private final float gravityStrength = 1.0f;
-        private final float suckDamage = 1000000f;
+        private final float pulseSpeed = 40f, baseRadius = 22f;
+        private final float gravityRange = 150f, gravityStrength = 1.0f, suckDamage = 1000000f;
 
         public YellowDwarfUnitType(String name) {
             super(name);
@@ -75,10 +72,7 @@ public class PulsarModMain extends Mod {
                     u.y -= Angles.trnsy(angle, gravityStrength);
                     u.damage(suckDamage * Time.delta);
                 }
-                if (dst <= unit.hitSize + u.hitSize + 5f) {
-                    if (DEBUG) Log.info("[PulsarMod] 黄矮星吞噬 " + u.type);
-                    u.kill();
-                }
+                if (dst <= unit.hitSize + u.hitSize + 5f) { u.kill(); }
             }
         }
 
@@ -95,10 +89,8 @@ public class PulsarModMain extends Mod {
             Lines.circle(x, y, wave * baseRadius * 3.5f);
             Draw.color(outerColor, 0.25f + pulse * 0.1f);
             Fill.circle(x, y, radius * 1.6f);
-            Draw.color(coreColor);
-            Fill.circle(x, y, radius * 0.7f);
-            Draw.color(Color.white, 0.8f);
-            Fill.circle(x, y, radius * 0.35f);
+            Draw.color(coreColor); Fill.circle(x, y, radius * 0.7f);
+            Draw.color(Color.white, 0.8f); Fill.circle(x, y, radius * 0.35f);
             for (int i = 0; i < 3; i++) {
                 float a = time * (25f + i * 10f) + i * 120f;
                 float d = radius * 0.5f;
@@ -118,11 +110,8 @@ public class PulsarModMain extends Mod {
         private final Color jetColor = Color.valueOf("00e5ff");
         private final float baseRadius = 5f;
         private final int particleCount = 400;
-        private final float particleSpeed = 30f;
-        private final float jetLength = 1000f;
-        private final float dps = 150f;
-        private final float gravityRange = 180f;
-        private final float gravityStrength = 4.0f;
+        private final float particleSpeed = 30f, jetLength = 1000f, dps = 150f;
+        private final float gravityRange = 180f, gravityStrength = 4.0f;
 
         public BluePulsarUnitType(String name) {
             super(name);
@@ -156,10 +145,7 @@ public class PulsarModMain extends Mod {
                     u.x -= Angles.trnsx(angle, gravityStrength);
                     u.y -= Angles.trnsy(angle, gravityStrength);
                 }
-                if (dst <= unit.hitSize + u.hitSize + 5f) {
-                    if (DEBUG) Log.info("[PulsarMod] 中子星吞噬 " + u.type);
-                    u.kill();
-                }
+                if (dst <= unit.hitSize + u.hitSize + 5f) { u.kill(); }
             }
         }
 
@@ -172,8 +158,7 @@ public class PulsarModMain extends Mod {
             drawNeutronJet(x, y, 0f + swing, time, unit.id);
             drawNeutronJet(x, y, 180f + swing, time, unit.id + 1000);
             Draw.z(110f);
-            Draw.color(coreColor);
-            Fill.circle(x, y, baseRadius * 1.5f);
+            Draw.color(coreColor); Fill.circle(x, y, baseRadius * 1.5f);
             Fill.circle(x, y, baseRadius * 0.5f);
             Draw.reset(); Draw.z(0f);
         }
@@ -198,12 +183,6 @@ public class PulsarModMain extends Mod {
                 float size = (1.0f - t * 0.6f) * Mathf.rand.random(0.7f, 1.2f);
                 size = Math.max(size, 0.15f);
                 Draw.color(c, alpha); Fill.circle(px, py, size);
-                if (Mathf.rand.chance(0.06f)) {
-                    float sa = a + Mathf.rand.range(12f);
-                    float sd = dist + Mathf.rand.random(3f, 10f);
-                    Draw.color(c, alpha * 0.3f);
-                    Fill.circle(x + Angles.trnsx(sa, sd), y + Angles.trnsy(sa, sd), size * 0.4f);
-                }
             }
             Mathf.rand.setSeed(0);
         }
@@ -221,16 +200,11 @@ public class PulsarModMain extends Mod {
     // ====================================================================
     public static class BlackHoleUnitType extends UnitType {
         private final float baseRadius = 6f;
-        private final float gravityRange = 350f;
-        private final float gravityStrength = 5.0f;
+        private final float gravityRange = 350f, gravityStrength = 5.0f;
         private final int jetParticleCount = 380;
-        private final float jetParticleSpeed = 28f;
-        private final float jetLength = 220f;
-        private final float dps = 300f;
+        private final float jetParticleSpeed = 28f, jetLength = 220f, dps = 300f;
         private final int diskParticles = 160;
-        private final float diskRx = 24f;
-        private final float diskRy = 9f;
-        private final float diskSpeed = 12f;
+        private final float diskRx = 24f, diskRy = 9f, diskSpeed = 12f;
         private final Color jetColor = Color.valueOf("c0c8d0");
         private final Color jetOuter = Color.valueOf("808890");
         private final Color coreColor = Color.valueOf("505050");
@@ -269,10 +243,7 @@ public class PulsarModMain extends Mod {
                     u.x -= Angles.trnsx(angle, gravityStrength);
                     u.y -= Angles.trnsy(angle, gravityStrength);
                 }
-                if (dst <= unit.hitSize + u.hitSize + 5f) {
-                    if (DEBUG) Log.info("[PulsarMod] 黑洞湮灭 " + u.type);
-                    u.remove();
-                }
+                if (dst <= unit.hitSize + u.hitSize + 5f) { u.remove(); }
             }
         }
 
@@ -313,12 +284,6 @@ public class PulsarModMain extends Mod {
                     float size = (1.5f - t * 1.0f) * Mathf.rand.random(0.8f, 1.5f);
                     size = Math.max(size, 0.25f);
                     Draw.color(c, alpha); Fill.circle(px, py, size);
-                    if (Mathf.rand.chance(0.1f)) {
-                        float sa = a + Mathf.rand.range(18f);
-                        float sd = dist + Mathf.rand.random(4f, 15f);
-                        Draw.color(c, alpha * 0.5f);
-                        Fill.circle(x + Angles.trnsx(sa, sd), y + Angles.trnsy(sa, sd), size * 0.6f);
-                    }
                 }
             }
             Mathf.rand.setSeed(0);
@@ -352,123 +317,117 @@ public class PulsarModMain extends Mod {
     }
 
     // ====================================================================
-    //  冲击波星：蓄力→全图冲击波→命中爆炸
+    //  冲击波星（全图秒杀 + 力墙完美阻挡 + 天体免疫 + 视觉特效）
     // ====================================================================
     public static class ShockwaveUnitType extends UnitType {
         private final Color coreColor = Color.valueOf("00e5ff");
-        private final Color outerColor = Color.valueOf("0099cc");
-        private final float baseRadius = 5f;
-
-        private final float shockwaveInterval = 20f * 60f;
-        private final float shockwaveSpeed = 250f;          // 放慢，让人看清
-        private final float shockwaveMaxRadius = 10000f;
-        private final float shockwaveThickness = 25f;
-        private final float chargeTime = 3f * 60f;          // 蓄力3秒
-
+        private final float baseRadius = 22f;
+        
+        private final float shockwaveInterval = 20f; // 释放间隔(秒)
+        private final float shockwaveMaxRadius = 10000f; // 全图范围
+        private final float shockwaveSpeed = 250f; // 扩散速度
+        private final float shockwaveThickness = 12f;
+        
         private float shockwaveTimer = 0f;
         private float shockwaveRadius = -1f;
-        private final Seq<Building> hitShields = new Seq<>();
-        private final Seq<HitMarker> hitMarkers = new Seq<>(); // 命中标记，用于渲染爆炸
-
-        private static class HitMarker {
-            float x, y, time;
-            HitMarker(float x, float y, float time) { this.x = x; this.y = y; this.time = time; }
-        }
+        private Seq<Building> hitShields = new Seq<>();
 
         public ShockwaveUnitType(String name) {
             super(name);
-            health = Integer.MAX_VALUE; speed = 0f; rotateSpeed = 12f;
-            hitSize = baseRadius * 2f; constructor = UnitEntity::create;
-            weapons = new Seq<>(); outlineColor = Color.valueOf("00000000");
-            region = Core.atlas.find("clear"); drawBody = false; drawCell = false;
+            health = Integer.MAX_VALUE;
+            speed = 0f;
+            rotateSpeed = 8f;
+            hitSize = baseRadius * 2f;
+            constructor = UnitEntity::create;
+            weapons = new Seq<>();
+            outlineColor = Color.valueOf("00000000");
             localizedName = "冲击波星";
         }
 
         @Override
         public void update(Unit unit) {
+            // 本体无敌
             unit.apply(invincible, 5f);
-
-            shockwaveTimer += Time.delta;
-
-            // 蓄力阶段：快到时间时本体在 draw 里表现
-
-            // 释放冲击波
-            if (shockwaveTimer >= shockwaveInterval) {
+            
+            shockwaveTimer += Time.delta / 60f;
+            
+            // 触发冲击波
+            if (shockwaveRadius < 0f && shockwaveTimer >= shockwaveInterval) {
+                shockwaveRadius = unit.hitSize;
                 shockwaveTimer = 0f;
-                shockwaveRadius = 0f;
                 hitShields.clear();
-                hitMarkers.clear();
-                if (DEBUG) Log.info("[PulsarMod] 冲击波星释放全图冲击波！");
+                // 蓄力特效
+                Fx.shockwave.at(unit.x, unit.y, 0f, coreColor);
             }
-
-            // 清理过期的命中标记（1秒后消失）
-            hitMarkers.removeAll(m -> Time.time - m.time > 60f);
-
+            
+            // 冲击波扩散与伤害判定
             if (shockwaveRadius >= 0f) {
-                float prevRadius = shockwaveRadius;
-                shockwaveRadius += shockwaveSpeed * Time.delta;
-
-                // 对单位
+                shockwaveRadius += shockwaveSpeed * (Time.delta / 60f);
+                
+                // 伤害判定
                 for (Unit u : Groups.unit) {
-                    if (u == null || u.dead) continue;
-                    if (u == unit || u.team == unit.team || isCelestialUnit(u)) continue;
+                    if (u == null || u.dead || u.team == unit.team) continue;
+                    // 绝对免疫其他天体（通过类型直接判断，防误杀）
+                    if (u.type instanceof YellowDwarfUnitType || u.type instanceof BluePulsarUnitType || 
+                        u.type instanceof BlackHoleUnitType || u.type instanceof ShockwaveUnitType) continue;
+                    
                     float dst = Mathf.dst(unit.x, unit.y, u.x, u.y);
-                    if (dst >= prevRadius && dst <= shockwaveRadius + shockwaveThickness) {
+                    if (dst <= shockwaveRadius + shockwaveThickness && dst >= shockwaveRadius - shockwaveThickness) {
                         if (!isBlockedByShield(unit.x, unit.y, u.x, u.y)) {
-                            hitMarkers.add(new HitMarker(u.x, u.y, Time.time));
-                            if (DEBUG) Log.info("[PulsarMod] 冲击波秒杀单位 " + u.type);
-                            u.remove();
+                            Fx.dynamicExplosion.at(u.x, u.y); // 命中爆炸特效
+                            u.kill();
                         }
                     }
                 }
-
-                // 对建筑
+                
                 for (Building b : Groups.build) {
-                    if (b == null || !b.isValid()) continue;
-                    if (b.team == unit.team) continue;
+                    if (b == null || !b.isValid() || b.team == unit.team) continue;
+                    
                     float dst = Mathf.dst(unit.x, unit.y, b.x, b.y);
-                    if (dst >= prevRadius && dst <= shockwaveRadius + shockwaveThickness) {
+                    if (dst <= shockwaveRadius + shockwaveThickness && dst >= shockwaveRadius - shockwaveThickness) {
                         if (!isBlockedByShield(unit.x, unit.y, b.x, b.y)) {
-                            hitMarkers.add(new HitMarker(b.x, b.y, Time.time));
-                            if (DEBUG) Log.info("[PulsarMod] 冲击波摧毁建筑 " + b.block);
+                            Fx.blockExplode.at(b.x, b.y); // 建筑爆炸特效
                             b.kill();
                         }
                     }
                 }
-
+                
                 if (shockwaveRadius > shockwaveMaxRadius) {
                     shockwaveRadius = -1f;
                 }
             }
         }
 
-        private boolean isBlockedByShield(float x1, float y1, float x2, float y2) {
+        /** 射线检测：从冲击波中心到目标，如果中间有带护盾的力墙则阻挡 */
+        private boolean isBlockedByShield(float sx, float sy, float tx, float ty) {
             for (Building b : Groups.build) {
                 if (b == null || !b.isValid()) continue;
-                if (!isShieldBuilding(b)) continue;
-                if (hitShields.contains(b)) continue;
-                float distToSegment = distanceToSegment(b.x, b.y, x1, y1, x2, y2);
-                float blockSize = b.block.size * 4f;
-                if (distToSegment <= blockSize + 3f) {
-                    b.damage(200f);
-                    hitShields.add(b);
-                    hitMarkers.add(new HitMarker(b.x, b.y, Time.time));
-                    if (DEBUG) Log.info("[PulsarMod] 力墙挡下冲击波！");
-                    return true;
+                
+                // ✅ 核心修复：检测建筑是否有护盾(hasShields)，兼容原版力墙投影(force-projector)
+                if (b.block.hasShields) {
+                    if (hitShields.contains(b)) continue; // 本次冲击波已处理过该力墙
+                    
+                    // 检测目标与冲击源连线是否穿过力墙
+                    float dist = distanceToSegment(b.x, b.y, sx, sy, tx, ty);
+                    float size = b.block.size * 4f; 
+                    
+                    if (dist <= size + 4f) {
+                        // ✅ 核心修复：消耗500盾容，力墙掉200血（使用原版护盾伤害机制）
+                        b.damage(200f); 
+                        b.block.health -= 0; 
+                        
+                        hitShields.add(b);
+                        
+                        // 力墙挡下时的特效
+                        Fx.shieldHit.at(b.x, b.y);
+                        Fx.dynamicExplosion.at(b.x, b.y);
+                        
+                        if (Log.info != null) Log.info("[PulsarMod] 力墙 " + b.block.name + " 挡下冲击波！");
+                        return true; // 阻挡成功，连线后方的目标不受伤
+                    }
                 }
             }
             return false;
-        }
-
-        private boolean isShieldBuilding(Building b) {
-            String name = b.block.name.toLowerCase();
-            return name.contains("shield") || name.contains("force") || name.contains("wall");
-        }
-
-        private boolean isCelestialUnit(Unit u) {
-            String typeName = u.type.name;
-            return typeName.equals("yellow-dwarf") || typeName.equals("blue-pulsar")
-                || typeName.equals("black-hole") || typeName.equals("shockwave-star");
         }
 
         @Override
@@ -476,80 +435,45 @@ public class PulsarModMain extends Mod {
             Draw.reset();
             float x = unit.x, y = unit.y, time = Time.time;
 
-            // ===== 画命中爆炸特效 =====
-            Draw.z(115f);
-            for (HitMarker marker : hitMarkers) {
-                float age = time - marker.time;
-                float progress = age / 60f; // 0~1
-                if (progress > 1f) continue;
-                float explosionRadius = progress * 20f;
-                float alpha = 1f - progress;
-
-                // 爆炸光球
-                Draw.color(Color.valueOf("00e5ff"), alpha * 0.8f);
-                Fill.circle(marker.x, marker.y, explosionRadius);
-                Draw.color(Color.white, alpha * 0.6f);
-                Fill.circle(marker.x, marker.y, explosionRadius * 0.5f);
-
-                // 爆炸十字
-                Lines.stroke(2f * alpha);
-                Draw.color(Color.valueOf("00e5ff"), alpha);
-                Lines.line(marker.x - explosionRadius, marker.y, marker.x + explosionRadius, marker.y);
-                Lines.line(marker.x, marker.y - explosionRadius, marker.x, marker.y + explosionRadius);
+            // ✅ 蓄力动画（释放前3秒）
+            float timeToNext = shockwaveInterval - shockwaveTimer;
+            if (timeToNext <= 3f && shockwaveRadius < 0f) {
+                float progress = 1f - (timeToNext / 3f);
+                Draw.z(111f);
+                Draw.color(coreColor, 0.3f + progress * 0.5f);
+                Fill.circle(x, y, baseRadius * (1f + progress * 1.5f) + Mathf.sin(time * 10f) * 2f);
             }
 
-            // ===== 画冲击波波环 =====
+            // ✅ 冲击波视觉（实心填充 + 多层高亮边缘 + 旋转粒子）
             if (shockwaveRadius >= 0f) {
                 Draw.z(120f);
-                float progress = shockwaveRadius / shockwaveMaxRadius;
-                float alpha = 1f - progress * 0.6f; // 不要衰减太快
-
-                // 外层光晕（宽、透明）
-                Draw.color(Color.valueOf("00e5ff"), alpha * 0.25f);
-                Lines.stroke(shockwaveThickness * 2.5f);
-                Lines.circle(x, y, shockwaveRadius);
-
-                // 中层能量环（主视觉）
-                Draw.color(Color.valueOf("00b3ff"), alpha * 0.6f);
+                float alpha = 0.4f * (1f - shockwaveRadius / shockwaveMaxRadius);
+                
+                // 主体实心圆
+                Draw.color(coreColor, alpha);
+                Fill.circle(x, y, shockwaveRadius);
+                
+                // 边缘高亮环
+                Draw.color(coreColor, alpha * 2f);
                 Lines.stroke(shockwaveThickness);
                 Lines.circle(x, y, shockwaveRadius);
-
-                // 内层亮线
-                Draw.color(Color.white, alpha * 0.9f);
+                
+                // 最外层白色亮边
+                Draw.color(Color.white, alpha);
                 Lines.stroke(3f + Mathf.sin(time * 10f) * 2f);
                 Lines.circle(x, y, shockwaveRadius);
-
-                // 波环边缘的粒子（旋转）
-                int particleCount = 24;
-                for (int i = 0; i < particleCount; i++) {
-                    float angle = time * 3f + i * (360f / particleCount);
+                
+                // 边缘旋转能量粒子
+                for (int i = 0; i < 24; i++) {
+                    float angle = time * 3f + i * 15f;
                     float px = x + Angles.trnsx(angle, shockwaveRadius);
                     float py = y + Angles.trnsy(angle, shockwaveRadius);
-                    float pAlpha = alpha * (0.6f + Mathf.sin(time + i * 30f) * 0.4f);
-                    Draw.color(Color.valueOf("00e5ff"), pAlpha);
+                    Draw.color(coreColor, alpha * 2f);
                     Fill.circle(px, py, 3f + Mathf.sin(time * 5f + i) * 2f);
                 }
-
-                Draw.reset();
             }
 
-            // ===== 蓄力动画 =====
-            float timeToNext = shockwaveInterval - shockwaveTimer;
-            if (timeToNext <= chargeTime && shockwaveRadius < 0f) {
-                // 蓄力阶段：本体膨胀+闪烁
-                float chargeProgress = 1f - (timeToNext / chargeTime); // 0→1
-                float chargePulse = Mathf.sin(time * (5f + chargeProgress * 10f), 1f, 0.5f);
-                float chargeScale = 1f + chargeProgress * 2f + chargePulse;
-
-                Draw.z(111f);
-                // 蓄力光晕
-                Draw.color(Color.valueOf("00e5ff"), (0.3f + chargeProgress * 0.5f) * Mathf.sin(time * 15f, 1f, 0.5f));
-                Fill.circle(x, y, baseRadius * 3f * chargeScale);
-                Draw.color(Color.white, 0.5f * chargeProgress);
-                Fill.circle(x, y, baseRadius * 1.5f * chargeScale);
-            }
-
-            // ===== 本体（中子星同款）=====
+            // ✅ 本体（中子星同款蓝色核心）
             Draw.z(110f);
             Draw.color(coreColor);
             Fill.circle(x, y, baseRadius * 1.5f);
@@ -562,9 +486,11 @@ public class PulsarModMain extends Mod {
         }
 
         private float distanceToSegment(float px, float py, float x1, float y1, float x2, float y2) {
-            float dx = x2 - x1, dy = y2 - y1; float len2 = dx * dx + dy * dy;
+            float dx = x2 - x1, dy = y2 - y1; 
+            float len2 = dx * dx + dy * dy;
             if (len2 < 0.0001f) return Mathf.dst(px, py, x1, y1);
-            float t = ((px - x1) * dx + (py - y1) * dy) / len2; t = Mathf.clamp(t, 0f, 1f);
+            float t = ((px - x1) * dx + (py - y1) * dy) / len2; 
+            t = Mathf.clamp(t, 0f, 1f);
             return Mathf.dst(px, py, x1 + t * dx, y1 + t * dy);
         }
     }
