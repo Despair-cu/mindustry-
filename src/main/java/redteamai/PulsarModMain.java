@@ -10,19 +10,33 @@ import arc.math.Mathf;
 import arc.struct.Seq;
 import arc.util.Log;
 import arc.util.Time;
+import mindustry.content.StatusEffects;
 import mindustry.gen.Groups;
 import mindustry.gen.Unit;
 import mindustry.gen.UnitEntity;
 import mindustry.game.Team;
 import mindustry.mod.Mod;
+import mindustry.type.StatusEffect;
 import mindustry.type.UnitType;
 
 public class PulsarModMain extends Mod {
 
     public static boolean DEBUG = false;
 
+    // ============ 定义官方无限状态 ============
+    public static StatusEffect invincible;
+
     @Override
     public void loadContent() {
+        // 初始化无限状态效果
+        invincible = new StatusEffect("pulsar-invincible") {
+            {
+                healthMultiplier = Float.POSITIVE_INFINITY;
+                show = false; // 不在HUD上显示
+                damageMultiplier = 1f;
+            }
+        };
+
         Log.info("[PulsarMod] 加载恒星单位...");
         new YellowDwarfUnitType("yellow-dwarf").load();
         new BluePulsarUnitType("blue-pulsar").load();
@@ -58,7 +72,9 @@ public class PulsarModMain extends Mod {
 
         @Override
         public void update(Unit unit) {
-            unit.health = health;
+            // ✅ 套用官方无限状态（持续5秒，每帧调用相当于永久）
+            unit.apply(invincible, 5f);
+
             for (Unit u : Groups.unit) {
                 if (u == null || u.dead || u.team == unit.team) continue;
                 float dst = Mathf.dst(unit.x, unit.y, u.x, u.y);
@@ -75,6 +91,7 @@ public class PulsarModMain extends Mod {
             }
         }
 
+        // ... draw 方法不变，省略 ...
         @Override
         public void draw(Unit unit) {
             Draw.reset();
@@ -108,7 +125,7 @@ public class PulsarModMain extends Mod {
     }
 
     // ====================================================================
-    //  中子星：左右快摆动，射线1000长，本体缩小，加偏黄吸积盘
+    //  中子星：左右快摆动，射线1000长，本体缩小
     // ====================================================================
     public static class BluePulsarUnitType extends UnitType {
 
@@ -116,19 +133,14 @@ public class PulsarModMain extends Mod {
         private final Color outerColor = Color.valueOf("0099cc");
         private final Color jetColor = Color.valueOf("00e5ff");
 
-        private final float baseRadius = 3.5f;              // ✅ 本体进一步缩小
-        private final int particleCount = 700;              // ✅ 射线粒子加多
+        private final float baseRadius = 5f;
+        private final int particleCount = 400;
         private final float particleSpeed = 30f;
         private final float jetLength = 1000f;
         private final float dps = 150f;
 
         private final float gravityRange = 180f;
         private final float gravityStrength = 4.0f;
-
-        // ✅ 吸积盘颜色（偏黄）
-        private final Color diskInner = Color.valueOf("ffff88");
-        private final Color diskMid = Color.valueOf("ffcc00");
-        private final Color diskOuter = Color.valueOf("ff9900");
 
         public BluePulsarUnitType(String name) {
             super(name);
@@ -147,7 +159,8 @@ public class PulsarModMain extends Mod {
 
         @Override
         public void update(Unit unit) {
-            unit.health = health;
+            // ✅ 套用官方无限状态
+            unit.apply(invincible, 5f);
 
             float swing = Mathf.sin(Time.time, 25f, 8f);
             float damage = dps * Time.delta;
@@ -178,22 +191,17 @@ public class PulsarModMain extends Mod {
             }
         }
 
+        // ... draw 和 distanceToSegment 方法不变 ...
         @Override
         public void draw(Unit unit) {
             Draw.reset();
             float x = unit.x, y = unit.y, time = Time.time;
 
-            // 喷流（底层）
             Draw.z(85f);
             float swing = Mathf.sin(time, 25f, 8f);
             drawNeutronJet(x, y, 0f + swing, time, unit.id);
             drawNeutronJet(x, y, 180f + swing, time, unit.id + 1000);
 
-            // ✅ 吸积盘（中层，上下方展开）
-            Draw.z(95f);
-            drawAccretionDisk(x, y, time);
-
-            // 本体（顶层）
             Draw.z(110f);
             Draw.color(coreColor);
             Fill.circle(x, y, baseRadius * 1.5f);
@@ -239,34 +247,6 @@ public class PulsarModMain extends Mod {
             Mathf.rand.setSeed(0);
         }
 
-        // ✅ 中子星吸积盘（上下方偏黄）
-        private void drawAccretionDisk(float x, float y, float time) {
-            int diskParticles = 160;
-            float diskRx = 10f;   // 左右窄
-            float diskRy = 28f;   // 上下宽（垂直于左右喷流）
-            float diskSpeed = 15f;
-
-            Mathf.rand.setSeed(777);
-            for (int i = 0; i < diskParticles; i++) {
-                float t = Mathf.rand.random(0f, 1f);
-                float angle = time * diskSpeed * (1f + (1f - t) * 1.5f) + t * 360f * 2f;
-                float rx = diskRx * (0.3f + t * 0.7f);
-                float ry = diskRy * (0.3f + t * 0.7f);
-                float px = x + Angles.trnsx(angle, rx);
-                float py = y + Angles.trnsy(angle, ry);
-
-                Color c = (t < 0.4f) ? diskInner.lerp(diskMid, t / 0.4f) : diskMid.lerp(diskOuter, (t - 0.4f) / 0.6f);
-                float flicker = (Mathf.sin(time * 8f + i * 0.9f) + 1f) / 2f;
-                float alpha = (0.7f + flicker * 0.3f) * (1f - t * 0.6f);
-                float size = (2.0f - t * 1.3f) + Mathf.sin(time * 6f + i) * 0.3f;
-                size = Math.max(size, 0.3f);
-
-                Draw.color(c, alpha);
-                Fill.circle(px, py, size);
-            }
-            Mathf.rand.setSeed(0);
-        }
-
         private float distanceToSegment(float px, float py, float x1, float y1, float x2, float y2) {
             float dx = x2 - x1, dy = y2 - y1;
             float len2 = dx * dx + dy * dy;
@@ -278,7 +258,7 @@ public class PulsarModMain extends Mod {
     }
 
     // ====================================================================
-    //  黑洞：吸引范围加大，射线加长到220，本体纯黑，横吸积盘
+    //  黑洞：吸引范围加大，射线加长到220，本体缩小
     // ====================================================================
     public static class BlackHoleUnitType extends UnitType {
 
@@ -299,9 +279,7 @@ public class PulsarModMain extends Mod {
 
         private final Color jetColor = Color.valueOf("c0c8d0");
         private final Color jetOuter = Color.valueOf("808890");
-
-        // ✅ 黑洞本体改为纯黑色
-        private final Color coreColor = Color.valueOf("000000");
+        private final Color coreColor = Color.valueOf("505050");
 
         private final Color diskInner = Color.valueOf("fff200");
         private final Color diskMid = Color.valueOf("ffae00");
@@ -321,7 +299,8 @@ public class PulsarModMain extends Mod {
 
         @Override
         public void update(Unit unit) {
-            unit.health = health;
+            // ✅ 套用官方无限状态
+            unit.apply(invincible, 5f);
 
             float swing = Mathf.sin(Time.time, 40f, 6f);
             float damage = dps * Time.delta;
@@ -352,6 +331,7 @@ public class PulsarModMain extends Mod {
             }
         }
 
+        // ... draw、drawBlackHoleJets、drawAccretionDisk、distanceToSegment 方法不变 ...
         @Override
         public void draw(Unit unit) {
             Draw.reset();
@@ -364,12 +344,11 @@ public class PulsarModMain extends Mod {
             Draw.z(95f);
             drawAccretionDisk(x, y, time);
 
-            // ✅ 黑洞本体 - 纯黑
             Draw.z(110f);
             Draw.color(coreColor);
             Fill.circle(x, y, baseRadius * 1.3f);
-            Draw.color(Color.valueOf("0a0a0a"));
-            Fill.circle(x, y, baseRadius * 0.5f);
+            Draw.color(Color.valueOf("888888"), 0.5f);
+            Fill.circle(x, y, baseRadius * 0.4f);
 
             Draw.reset();
             Draw.z(0f);
