@@ -33,12 +33,39 @@ public class AllUnitsMod extends Mod {
 
     // ==================== 真实 Pixmap API 辅助 ====================
 
-    /** 用 float 分量设置颜色（真实 Pixmap.setColor 只接受 float 或 int） */
+    /** 用 float 分量设置颜色 */
     private void setColor(Pixmap pix, Color c) {
         pix.setColor(c.r, c.g, c.b, c.a);
     }
 
-    /** 自己实现的三角形填充（用扫描线算法，加载时只跑一次，性能没问题） */
+    /** 自己实现的椭圆填充（替代不存在的 Pixmap.fillEllipse） */
+    private void fillEllipse(Pixmap pix, int x, int y, int width, int height) {
+        int xc = x + width / 2;
+        int yc = y + height / 2;
+        int a = width / 2;
+        int b = height / 2;
+        if (a <= 0 || b <= 0) return;
+
+        int a2 = a * a;
+        int b2 = b * b;
+
+        int minX = Math.max(0, x);
+        int maxX = Math.min(31, x + width);
+        int minY = Math.max(0, y);
+        int maxY = Math.min(31, y + height);
+
+        for (int py = minY; py <= maxY; py++) {
+            for (int px = minX; px <= maxX; px++) {
+                long dx = px - xc;
+                long dy = py - yc;
+                if (dx * dx * b2 + dy * dy * a2 <= (long) a2 * b2) {
+                    pix.drawPixel(px, py);
+                }
+            }
+        }
+    }
+
+    /** 自己实现的三角形填充（扫描线算法） */
     private void fillTriangle(Pixmap pix, int x1, int y1, int x2, int y2, int x3, int y3) {
         int minX = Math.max(0, Math.min(x1, Math.min(x2, x3)));
         int maxX = Math.min(31, Math.max(x1, Math.max(x2, x3)));
@@ -160,7 +187,8 @@ public class AllUnitsMod extends Mod {
                 pix.fillRect(14, 18, 4, 2);
                 break;
             case 7:
-                pix.fillEllipse(4, 8, 24, 16);
+                // 调用自己实现的 fillEllipse，不再依赖 Pixmap.fillEllipse
+                fillEllipse(pix, 4, 8, 24, 16);
                 setColor(pix, ac);
                 pix.fillRect(0, 14, 6, 4);
                 pix.fillRect(26, 14, 6, 4);
@@ -320,6 +348,7 @@ public class AllUnitsMod extends Mod {
             health = 100f; speed = 4.2f; hitSize = 8f; flying = true;
             region = generateSpecialSprite("cyan-support", 0xFF00FFCC, 0xFFFFFFFF, 2);
             abilities.add(new RepairFieldAbility(50f, 20f, 60f));
+            weapons.add(new Weapon() {{ reload = 15f; bullet = Bullets.standardCopper; x = 0f; y = -2f; }});
             weapons.add(new Weapon() {{ reload = 15f; bullet = Bullets.standardCopper; x = 0f; y = -2f; }});
             playerControllable = true;
         }};
