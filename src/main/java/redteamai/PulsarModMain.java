@@ -10,6 +10,7 @@ import arc.math.Mathf;
 import arc.struct.Seq;
 import arc.util.Log;
 import arc.util.Time;
+import mindustry.gen.Building;
 import mindustry.gen.Groups;
 import mindustry.gen.Unit;
 import mindustry.gen.UnitEntity;
@@ -38,6 +39,7 @@ public class PulsarModMain extends Mod {
         new YellowDwarfUnitType("yellow-dwarf").load();
         new BluePulsarUnitType("blue-pulsar").load();
         new BlackHoleUnitType("black-hole").load();
+        new ShockwaveUnitType("shockwave-star").load();
         Log.info("[PulsarMod] 所有单位注册完成");
     }
 
@@ -251,7 +253,7 @@ public class PulsarModMain extends Mod {
     }
 
     // ====================================================================
-    //  黑洞：吞噬范围内对所有单位无差别静默湮灭
+    //  黑洞
     // ====================================================================
     public static class BlackHoleUnitType extends UnitType {
 
@@ -316,10 +318,9 @@ public class PulsarModMain extends Mod {
                     u.x -= Angles.trnsx(angle, gravityStrength);
                     u.y -= Angles.trnsy(angle, gravityStrength);
                 }
-                // ✅ 对所有单位无差别静默湮灭，不触发 killed()，无法复活
                 if (dst <= unit.hitSize + u.hitSize + 5f) {
                     if (DEBUG) Log.info("[PulsarMod] 黑洞湮灭 " + u.type);
-                    u.remove(); // ← 关键：直接移除，不触发任何死亡事件
+                    u.remove();
                 }
             }
         }
@@ -405,6 +406,161 @@ public class PulsarModMain extends Mod {
                 Fill.circle(px, py, size);
             }
             Mathf.rand.setSeed(0);
+        }
+
+        private float distanceToSegment(float px, float py, float x1, float y1, float x2, float y2) {
+            float dx = x2 - x1, dy = y2 - y1;
+            float len2 = dx * dx + dy * dy;
+            if (len2 < 0.0001f) return Mathf.dst(px, py, x1, y1);
+            float t = ((px - x1) * dx + (py - y1) * dy) / len2;
+            t = Mathf.clamp(t, 0f, 1f);
+            return Mathf.dst(px, py, x1 + t * dx, y1 + t * dy);
+        }
+    }
+
+    // ====================================================================
+    //  冲击波星：每20秒全图蓝色冲击波，秒杀一切（天体免疫，力墙可挡）
+    // ====================================================================
+    public static class ShockwaveUnitType extends UnitType {
+
+        private final Color coreColor = Color.valueOf("00e5ff");
+        private final Color outerColor = Color.valueOf("0099cc");
+
+        private final float baseRadius = 5f;
+
+        private final float shockwaveInterval = 20f * 60f; // 20秒
+        private final float shockwaveSpeed = 600f;         // 更快的扩散速度
+        private final float shockwaveMaxRadius = 10000f;   // ✅ 全图覆盖（10000远超常规地图）
+        private final float shockwaveThickness = 12f;      // 波环厚度
+
+        private float shockwaveTimer = 0f;
+        private float shockwaveRadius = -1f;
+        private final Seq<Building> hitShields = new Seq<>();
+
+        public ShockwaveUnitType(String name) {
+            super(name);
+            health = Integer.MAX_VALUE;
+            speed = 0f;
+            rotateSpeed = 12f;
+            hitSize = baseRadius * 2f;
+            constructor = UnitEntity::create;
+            weapons = new Seq<>();
+            outlineColor = Color.valueOf("00000000");
+            region = Core.atlas.find("clear");
+            drawBody = false;
+            drawCell = false;
+            localizedName = "冲击波星";
+        }
+
+        @Override
+        public void update(Unit unit) {
+            unit.apply(invincible, 5f);
+
+            shockwaveTimer += Time.delta;
+            if (shockwaveTimer >= shockwaveInterval) {
+                shockwaveTimer = 0f;
+                shockwaveRadius = 0f;
+                hitShields.clear();
+                if (DEBUG) Log.info("[PulsarMod] 冲击波星释放全图冲击波！");
+            }
+
+            if (shockwaveRadius >= 0f) {
+                float prevRadius = shockwaveRadius;
+                shockwaveRadius += shockwaveSpeed * Time.delta;
+
+                // 对单位
+                for (Unit u : Groups.unit) {
+                    if (u == null || u.dead) continue;
+                    if (u == unit || u.team == unit.team || isCelestialUnit(u)) continue;
+
+                    float dst = Mathf.dst(unit.x, unit.y, u.x, u.y);
+                    if (dst >= prevRadius && dst <= shockwaveRadius + shockwaveThickness) {
+                        if (!isBlockedByShield(unit.x, unit.y, u.x, u.y)) {
+                            if (DEBUG) Log.info("[PulsarMod] 冲击波秒杀单位 " + u.type);
+                            u.remove();
+                        }
+                    }
+                }
+
+                // 对建筑
+                for (Building b : Groups.build) {
+                    if (b == null || !b.isValid()) continue;
+                    if (b.team == unit.team) continue;
+
+                    float dst = Mathf.dst(unit.x, unit.y, b.x, b.y);
+                    if (dst >= prevRadius && dst <= shockwaveRadius + shockwaveThickness) {
+                        if (!isBlockedByShield(unit.x, unit.y, b.x, b.y)) {
+                            if (DEBUG) Log.info("[PulsarMod] 冲击波摧毁建筑 " + b.block);
+                            b.kill();
+                        }
+                    }
+                }
+
+                if (shockwaveRadius > shockwaveMaxRadius) {
+                    shockwaveRadius = -1f;
+                }
+            }
+        }
+
+        private boolean isBlockedByShield(float x1, float y1, float x2, float y2) {
+            for (Building b : Groups.build) {
+                if (b == null || !b.isValid()) continue;
+                if (!isShieldBuilding(b)) continue;
+                if (hitShields.contains(b)) continue;
+
+                float distToSegment = distanceToSegment(b.x, b.y, x1, y1, x2, y2);
+                float blockSize = b.block.size * 4f;
+                if (distToSegment <= blockSize + 3f) {
+                    b.damage(200f);
+                    hitShields.add(b);
+                    if (DEBUG) Log.info("[PulsarMod] 力墙 " + b.block + " 挡下冲击波！");
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private boolean isShieldBuilding(Building b) {
+            String name = b.block.name.toLowerCase();
+            return name.contains("shield") || name.contains("force") || name.contains("wall");
+        }
+
+        private boolean isCelestialUnit(Unit u) {
+            String typeName = u.type.name;
+            return typeName.equals("yellow-dwarf") ||
+                   typeName.equals("blue-pulsar") ||
+                   typeName.equals("black-hole") ||
+                   typeName.equals("shockwave-star");
+        }
+
+        @Override
+        public void draw(Unit unit) {
+            Draw.reset();
+            float x = unit.x, y = unit.y, time = Time.time;
+
+            // 画冲击波（全图级蓝色光环）
+            if (shockwaveRadius >= 0f) {
+                Draw.z(120f);
+                float alpha = 1f - (shockwaveRadius / shockwaveMaxRadius);
+                Draw.color(Color.valueOf("00e5ff"), alpha * 0.9f);
+                Lines.stroke(4f + Mathf.sin(time, 15f, 3f));
+                Lines.circle(x, y, shockwaveRadius);
+                Draw.color(Color.valueOf("00e5ff"), alpha * 0.4f);
+                Lines.stroke(12f);
+                Lines.circle(x, y, shockwaveRadius);
+                Draw.reset();
+            }
+
+            // 本体（中子星同款）
+            Draw.z(110f);
+            Draw.color(coreColor);
+            Fill.circle(x, y, baseRadius * 1.5f);
+            Fill.circle(x, y, baseRadius * 0.5f);
+            Draw.color(Color.white, coreColor, 0.5f + Mathf.sin(time, 8f, 0.5f));
+            Fill.circle(x, y, baseRadius * 0.8f);
+
+            Draw.reset();
+            Draw.z(0f);
         }
 
         private float distanceToSegment(float px, float py, float x1, float y1, float x2, float y2) {
