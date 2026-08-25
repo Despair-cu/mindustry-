@@ -14,23 +14,15 @@ import mindustry.gen.Building;
 import mindustry.gen.Groups;
 import mindustry.gen.Unit;
 import mindustry.gen.UnitEntity;
+import mindustry.mod.Mod;
 import mindustry.type.UnitType;
 
 public class PulsarModMain extends Mod {
 
     public static boolean DEBUG = false;
-    public static StatusEffect invincible;
 
     @Override
     public void loadContent() {
-        invincible = new StatusEffect("pulsar-invincible") {
-            {
-                healthMultiplier = Float.POSITIVE_INFINITY;
-                show = false;
-                damageMultiplier = 1f;
-            }
-        };
-
         Log.info("[PulsarMod] 加载恒星单位...");
         new YellowDwarfUnitType("yellow-dwarf").load();
         new BluePulsarUnitType("blue-pulsar").load();
@@ -39,9 +31,6 @@ public class PulsarModMain extends Mod {
         Log.info("[PulsarMod] 所有单位注册完成");
     }
 
-    // ====================================================================
-    //  黄矮星
-    // ====================================================================
     public static class YellowDwarfUnitType extends UnitType {
         private final Color coreColor = Color.valueOf("ffd37f");
         private final Color outerColor = Color.valueOf("ff9d00");
@@ -58,7 +47,7 @@ public class PulsarModMain extends Mod {
 
         @Override
         public void update(Unit unit) {
-            unit.apply(invincible, 5f);
+            unit.health = health;
             for (Unit u : Groups.unit) {
                 if (u == null || u.dead || u.team == unit.team) continue;
                 float dst = Mathf.dst(unit.x, unit.y, u.x, u.y);
@@ -97,9 +86,6 @@ public class PulsarModMain extends Mod {
         }
     }
 
-    // ====================================================================
-    //  中子星
-    // ====================================================================
     public static class BluePulsarUnitType extends UnitType {
         private final Color coreColor = Color.valueOf("00e5ff");
         private final Color outerColor = Color.valueOf("0099cc");
@@ -120,7 +106,7 @@ public class PulsarModMain extends Mod {
 
         @Override
         public void update(Unit unit) {
-            unit.apply(invincible, 5f);
+            unit.health = health;
             float swing = Mathf.sin(Time.time, 25f, 8f);
             float damage = dps * Time.delta;
             for (int sign : new int[]{1, -1}) {
@@ -191,9 +177,6 @@ public class PulsarModMain extends Mod {
         }
     }
 
-    // ====================================================================
-    //  黑洞
-    // ====================================================================
     public static class BlackHoleUnitType extends UnitType {
         private final float baseRadius = 6f;
         private final float gravityRange = 350f, gravityStrength = 5.0f;
@@ -218,7 +201,7 @@ public class PulsarModMain extends Mod {
 
         @Override
         public void update(Unit unit) {
-            unit.apply(invincible, 5f);
+            unit.health = health;
             float swing = Mathf.sin(Time.time, 40f, 6f);
             float damage = dps * Time.delta;
             for (int sign : new int[]{1, -1}) {
@@ -312,61 +295,43 @@ public class PulsarModMain extends Mod {
         }
     }
 
-    // ====================================================================
-    //  冲击波星（修复编译错误 + 力墙完美阻挡 + 天体免疫 + 视觉特效）
-    // ====================================================================
     public static class ShockwaveUnitType extends UnitType {
         private final Color coreColor = Color.valueOf("00e5ff");
         private final float baseRadius = 22f;
-        
-        private final float shockwaveInterval = 20f * 60f; // 20秒（帧）
+        private final float shockwaveInterval = 20f * 60f;
         private final float shockwaveMaxRadius = 10000f;
         private final float shockwaveSpeed = 250f;
         private final float shockwaveThickness = 12f;
-        
         private float shockwaveTimer = 0f;
         private float shockwaveRadius = -1f;
         private Seq<Building> hitShields = new Seq<>();
+        private float lastExplosionX, lastExplosionY, lastExplosionTime;
 
         public ShockwaveUnitType(String name) {
             super(name);
-            health = Integer.MAX_VALUE;
-            speed = 0f;
-            rotateSpeed = 8f;
-            hitSize = baseRadius * 2f;
-            constructor = UnitEntity::create;
-            weapons = new Seq<>();
-            outlineColor = Color.valueOf("00000000");
+            health = Integer.MAX_VALUE; speed = 0f; rotateSpeed = 8f;
+            hitSize = baseRadius * 2f; constructor = UnitEntity::create;
+            weapons = new Seq<>(); outlineColor = Color.valueOf("00000000");
             localizedName = "冲击波星";
         }
 
         @Override
         public void update(Unit unit) {
-            unit.apply(invincible, 5f);
-            
+            unit.health = health;
             shockwaveTimer += Time.delta;
-            
-            // 触发冲击波
             if (shockwaveRadius < 0f && shockwaveTimer >= shockwaveInterval) {
                 shockwaveRadius = unit.hitSize;
                 shockwaveTimer = 0f;
                 hitShields.clear();
                 if (DEBUG) Log.info("[PulsarMod] 冲击波星释放全图冲击波！");
             }
-            
             if (shockwaveRadius >= 0f) {
                 float prevRadius = shockwaveRadius;
                 shockwaveRadius += shockwaveSpeed * (Time.delta / 60f);
-                
-                // 对单位
                 for (Unit u : Groups.unit) {
                     if (u == null || u.dead || u.team == unit.team) continue;
-                    // ✅ instanceof 判断，绝对免疫
-                    if (u.type instanceof YellowDwarfUnitType ||
-                        u.type instanceof BluePulsarUnitType ||
-                        u.type instanceof BlackHoleUnitType ||
-                        u.type instanceof ShockwaveUnitType) continue;
-                    
+                    if (u.type instanceof YellowDwarfUnitType || u.type instanceof BluePulsarUnitType ||
+                        u.type instanceof BlackHoleUnitType || u.type instanceof ShockwaveUnitType) continue;
                     float dst = Mathf.dst(unit.x, unit.y, u.x, u.y);
                     if (dst >= prevRadius && dst <= shockwaveRadius + shockwaveThickness) {
                         if (!isBlockedByShield(unit.x, unit.y, u.x, u.y)) {
@@ -375,11 +340,8 @@ public class PulsarModMain extends Mod {
                         }
                     }
                 }
-                
-                // 对建筑
                 for (Building b : Groups.build) {
                     if (b == null || !b.isValid() || b.team == unit.team) continue;
-                    
                     float dst = Mathf.dst(unit.x, unit.y, b.x, b.y);
                     if (dst >= prevRadius && dst <= shockwaveRadius + shockwaveThickness) {
                         if (!isBlockedByShield(unit.x, unit.y, b.x, b.y)) {
@@ -388,61 +350,39 @@ public class PulsarModMain extends Mod {
                         }
                     }
                 }
-                
-                if (shockwaveRadius > shockwaveMaxRadius) {
-                    shockwaveRadius = -1f;
-                }
+                if (shockwaveRadius > shockwaveMaxRadius) shockwaveRadius = -1f;
             }
         }
 
-        /** 用自己画的爆炸代替 Fx 类（避免依赖问题） */
         private void spawnExplosion(float x, float y) {
-            // 用一个简单的白光圆表示爆炸，实际绘制在 draw 里处理
-            // 这里只记录位置，让 draw 负责渲染
             lastExplosionX = x;
             lastExplosionY = y;
             lastExplosionTime = Time.time;
         }
 
-        private float lastExplosionX, lastExplosionY, lastExplosionTime;
-
-        /** 射线检测：从冲击波中心到目标，中间有护盾建筑则阻挡 */
         private boolean isBlockedByShield(float sx, float sy, float tx, float ty) {
             for (Building b : Groups.build) {
                 if (b == null || !b.isValid()) continue;
-                
-                // ✅ 用名称判断是否护盾类建筑（兼容所有版本）
                 String blockName = b.block.name.toLowerCase();
-                boolean isShield = blockName.contains("shield") || 
-                                   blockName.contains("force") || 
-                                   blockName.contains("力墙") ||
-                                   blockName.contains("防护");
-                
-                // ✅ 额外判断：有护盾血量的建筑也算（用反射安全获取）
+                boolean isShield = blockName.contains("shield") || blockName.contains("force") ||
+                                   blockName.contains("力墙") || blockName.contains("防护");
                 if (!isShield) {
                     try {
-                        // shieldHealth 是 Block 的字段，表示护盾总量
                         java.lang.reflect.Field f = b.block.getClass().getDeclaredField("shieldHealth");
                         f.setAccessible(true);
                         float shield = f.getFloat(b.block);
                         isShield = shield > 0;
                     } catch (Exception ignored) {}
                 }
-                
                 if (isShield) {
                     if (hitShields.contains(b)) continue;
-                    
                     float dist = distanceToSegment(b.x, b.y, sx, sy, tx, ty);
                     float size = b.block.size * 4f;
-                    
                     if (dist <= size + 4f) {
-                        // ✅ 力墙挡下：扣200血，消耗500盾容
                         b.damage(200f);
                         hitShields.add(b);
-                        
                         spawnExplosion(b.x, b.y);
-                        
-                        if (DEBUG) Log.info("[PulsarMod] 力墙 " + b.block.name + " 挡下冲击波！");
+                        if (DEBUG) Log.info("[PulsarMod] 力墙挡下冲击波！");
                         return true;
                     }
                 }
@@ -455,7 +395,6 @@ public class PulsarModMain extends Mod {
             Draw.reset();
             float x = unit.x, y = unit.y, time = Time.time;
 
-            // ✅ 画最近一次爆炸特效（持续30帧）
             if (Time.time - lastExplosionTime < 30f) {
                 float age = Time.time - lastExplosionTime;
                 float progress = age / 30f;
@@ -469,7 +408,6 @@ public class PulsarModMain extends Mod {
                 Draw.reset();
             }
 
-            // ✅ 蓄力动画（释放前3秒）
             float timeToNext = shockwaveInterval - shockwaveTimer;
             if (timeToNext <= 3f * 60f && shockwaveRadius < 0f) {
                 float progress = 1f - (timeToNext / (3f * 60f));
@@ -478,26 +416,17 @@ public class PulsarModMain extends Mod {
                 Fill.circle(x, y, baseRadius * (1f + progress * 1.5f) + Mathf.sin(time * 10f) * 2f);
             }
 
-            // ✅ 冲击波视觉
             if (shockwaveRadius >= 0f) {
                 Draw.z(120f);
                 float alpha = 0.4f * (1f - shockwaveRadius / shockwaveMaxRadius);
-                
-                // 主体实心圆
                 Draw.color(coreColor, alpha);
                 Fill.circle(x, y, shockwaveRadius);
-                
-                // 边缘高亮环
                 Draw.color(coreColor, alpha * 2f);
                 Lines.stroke(shockwaveThickness);
                 Lines.circle(x, y, shockwaveRadius);
-                
-                // 最外层白色亮边
                 Draw.color(Color.white, alpha);
                 Lines.stroke(3f + Mathf.sin(time * 10f) * 2f);
                 Lines.circle(x, y, shockwaveRadius);
-                
-                // 边缘旋转能量粒子
                 for (int i = 0; i < 24; i++) {
                     float angle = time * 3f + i * 15f;
                     float px = x + Angles.trnsx(angle, shockwaveRadius);
@@ -507,7 +436,6 @@ public class PulsarModMain extends Mod {
                 }
             }
 
-            // ✅ 本体
             Draw.z(110f);
             Draw.color(coreColor);
             Fill.circle(x, y, baseRadius * 1.5f);
@@ -520,11 +448,9 @@ public class PulsarModMain extends Mod {
         }
 
         private float distanceToSegment(float px, float py, float x1, float y1, float x2, float y2) {
-            float dx = x2 - x1, dy = y2 - y1; 
-            float len2 = dx * dx + dy * dy;
+            float dx = x2 - x1, dy = y2 - y1; float len2 = dx * dx + dy * dy;
             if (len2 < 0.0001f) return Mathf.dst(px, py, x1, y1);
-            float t = ((px - x1) * dx + (py - y1) * dy) / len2; 
-            t = Mathf.clamp(t, 0f, 1f);
+            float t = ((px - x1) * dx + (py - y1) * dy) / len2; t = Mathf.clamp(t, 0f, 1f);
             return Mathf.dst(px, py, x1 + t * dx, y1 + t * dy);
         }
     }
