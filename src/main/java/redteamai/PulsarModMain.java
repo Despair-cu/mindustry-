@@ -10,7 +10,6 @@ import arc.math.Mathf;
 import arc.struct.Seq;
 import arc.util.Log;
 import arc.util.Time;
-import mindustry.entities.Units;
 import mindustry.gen.Groups;
 import mindustry.gen.Unit;
 import mindustry.gen.UnitEntity;
@@ -252,7 +251,7 @@ public class PulsarModMain extends Mod {
     }
 
     // ====================================================================
-    //  黑洞：吞噬范围内对所有单位无差别湮灭
+    //  黑洞：吞噬范围内对所有单位无差别静默湮灭
     // ====================================================================
     public static class BlackHoleUnitType extends UnitType {
 
@@ -317,10 +316,10 @@ public class PulsarModMain extends Mod {
                     u.x -= Angles.trnsx(angle, gravityStrength);
                     u.y -= Angles.trnsy(angle, gravityStrength);
                 }
-                // ✅ 对所有单位无差别湮灭
+                // ✅ 对所有单位无差别静默湮灭，不触发 killed()，无法复活
                 if (dst <= unit.hitSize + u.hitSize + 5f) {
                     if (DEBUG) Log.info("[PulsarMod] 黑洞湮灭 " + u.type);
-                    Units.unitDestroy(u.id);
+                    u.remove(); // ← 关键：直接移除，不触发任何死亡事件
                 }
             }
         }
