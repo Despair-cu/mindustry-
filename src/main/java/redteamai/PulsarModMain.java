@@ -7,10 +7,13 @@ import arc.graphics.g2d.Fill;
 import arc.graphics.g2d.Lines;
 import arc.math.Angles;
 import arc.math.Mathf;
+import arc.math.geom.Vec2;
 import arc.struct.Seq;
 import arc.util.Log;
 import arc.util.Time;
+import mindustry.content.StatusEffects;
 import mindustry.gen.Groups;
+import mindustry.gen.Player;
 import mindustry.gen.Unit;
 import mindustry.gen.UnitEntity;
 import mindustry.game.Team;
@@ -27,11 +30,12 @@ public class PulsarModMain extends Mod {
         new YellowDwarfUnitType("yellow-dwarf").load();
         new BluePulsarUnitType("blue-pulsar").load();
         new BlackHoleUnitType("black-hole").load();
+        new DysonEngineerUnitType("dyson-engineer").load(); // ✅ 新单位
         Log.info("[PulsarMod] 所有单位注册完成");
     }
 
     // ====================================================================
-    //  黄矮星：脉动光球 + 吸入100万伤害（独有），无射线
+    //  黄矮星：脉动光球 + 吸入100万伤害（独有），无射线，可被套戴森云
     // ====================================================================
     public static class YellowDwarfUnitType extends UnitType {
 
@@ -43,6 +47,8 @@ public class PulsarModMain extends Mod {
         private final float gravityRange = 150f;
         private final float gravityStrength = 1.0f;
         private final float suckDamage = 1000000f;
+
+        public boolean hasDysonSwarm = false; // ✅ 戴森云标记
 
         public YellowDwarfUnitType(String name) {
             super(name);
@@ -63,6 +69,8 @@ public class PulsarModMain extends Mod {
                 if (u == null || u.dead || u.team == unit.team) continue;
                 float dst = Mathf.dst(unit.x, unit.y, u.x, u.y);
                 if (dst < gravityRange) {
+                    // ✅ 引力免疫检查
+                    if (u.hasEffect(StatusEffects.invincible)) continue;
                     float angle = Angles.angle(unit.x, unit.y, u.x, u.y);
                     u.x -= Angles.trnsx(angle, gravityStrength);
                     u.y -= Angles.trnsy(angle, gravityStrength);
@@ -100,6 +108,28 @@ public class PulsarModMain extends Mod {
                 float d = radius * 0.5f;
                 Draw.color(Color.white, coreColor, 0.5f + Mathf.sin(time + i * 60f, 10f, 0.5f));
                 Fill.circle(x + Angles.trnsx(a, d), y + Angles.trnsy(a, d), 2.5f + pulse * 1.2f);
+            }
+
+            // ✅ 戴森云特效（多层旋转能量环）
+            if (hasDysonSwarm) {
+                Draw.z(105f);
+                float cloudTime = time * 0.8f;
+                for (int i = 0; i < 3; i++) {
+                    float r = baseRadius + 12f + i * 7f;
+                    float alpha = 0.25f + 0.1f * Mathf.sin(cloudTime * 0.5f + i * 2f);
+                    Draw.color(Color.valueOf("ffd700"), alpha);
+                    Lines.stroke(2.5f + Mathf.sin(cloudTime + i * 60f, 5f, 1.5f));
+                    Lines.circle(x, y, r + Mathf.sin(cloudTime + i * 60f, 10f, 3f));
+                }
+                // 粒子点缀
+                Mathf.rand.setSeed(42);
+                for (int i = 0; i < 20; i++) {
+                    float a = cloudTime * (1.2f + i * 0.1f) + i * 137f;
+                    float r = baseRadius + 15f + (i % 3) * 7f;
+                    Draw.color(Color.valueOf("fffacd"), 0.6f);
+                    Fill.circle(x + Angles.trnsx(a, r), y + Angles.trnsy(a, r), 1.5f);
+                }
+                Mathf.rand.setSeed(0);
             }
 
             Draw.reset();
@@ -152,6 +182,7 @@ public class PulsarModMain extends Mod {
                 float ey = unit.y + Angles.trnsy(a, jetLength);
                 for (Unit u : Groups.unit) {
                     if (u == null || u.dead || u.team == unit.team) continue;
+                    if (u.hasEffect(StatusEffects.invincible)) continue; // ✅ 引力免疫
                     if (distanceToSegment(u.x, u.y, unit.x, unit.y, ex, ey) <= 4f + u.hitSize) {
                         u.damage(damage);
                     }
@@ -160,6 +191,7 @@ public class PulsarModMain extends Mod {
 
             for (Unit u : Groups.unit) {
                 if (u == null || u.dead || u.team == unit.team) continue;
+                if (u.hasEffect(StatusEffects.invincible)) continue; // ✅ 引力免疫
                 float dst = Mathf.dst(unit.x, unit.y, u.x, u.y);
                 if (dst < gravityRange) {
                     float angle = Angles.angle(unit.x, unit.y, u.x, u.y);
@@ -243,14 +275,14 @@ public class PulsarModMain extends Mod {
     // ====================================================================
     public static class BlackHoleUnitType extends UnitType {
 
-        private final float baseRadius = 6f;             // ✅ 本体缩小（原8f）
+        private final float baseRadius = 6f;
 
-        private final float gravityRange = 350f;         // ✅ 吸引范围加大（原250f）
+        private final float gravityRange = 350f;
         private final float gravityStrength = 5.0f;
 
         private final int jetParticleCount = 380;
         private final float jetParticleSpeed = 28f;
-        private final float jetLength = 220f;            // ✅ 射线加长（原120f）
+        private final float jetLength = 220f;
         private final float dps = 300f;
 
         private final int diskParticles = 160;
@@ -290,6 +322,7 @@ public class PulsarModMain extends Mod {
                 float ey = unit.y + Angles.trnsy(a, jetLength);
                 for (Unit u : Groups.unit) {
                     if (u == null || u.dead || u.team == unit.team) continue;
+                    if (u.hasEffect(StatusEffects.invincible)) continue; // ✅ 引力免疫
                     if (distanceToSegment(u.x, u.y, unit.x, unit.y, ex, ey) <= 5f + u.hitSize) {
                         u.damage(damage);
                     }
@@ -298,6 +331,7 @@ public class PulsarModMain extends Mod {
 
             for (Unit u : Groups.unit) {
                 if (u == null || u.dead || u.team == unit.team) continue;
+                if (u.hasEffect(StatusEffects.invincible)) continue; // ✅ 引力免疫
                 float dst = Mathf.dst(unit.x, unit.y, u.x, u.y);
                 if (dst < gravityRange) {
                     float angle = Angles.angle(unit.x, unit.y, u.x, u.y);
@@ -401,6 +435,85 @@ public class PulsarModMain extends Mod {
             float t = ((px - x1) * dx + (py - y1) * dy) / len2;
             t = Mathf.clamp(t, 0f, 1f);
             return Mathf.dst(px, py, x1 + t * dx, y1 + t * dy);
+        }
+    }
+
+    // ====================================================================
+    //  ✅ 新单位：戴森工程师
+    // ====================================================================
+    public static class DysonEngineerUnitType extends UnitType {
+
+        private final float detectRange = 300f; // 检测黄矮星范围
+
+        public DysonEngineerUnitType(String name) {
+            super(name);
+            health = 5000;
+            speed = 2.5f;
+            rotateSpeed = 5f;
+            hitSize = 16f;
+            constructor = UnitEntity::create;
+            weapons = new Seq<>();
+            outlineColor = Color.valueOf("00000000");
+            region = Core.atlas.find("clear");
+            drawBody = false;
+            drawCell = false;
+            localizedName = "戴森工程师";
+        }
+
+        @Override
+        public void update(Unit unit) {
+            // 1. 检测附近黄矮星并套戴森云
+            for (Unit u : Groups.unit) {
+                if (u == null || u.dead || u.team != unit.team) continue;
+                if (u.type instanceof YellowDwarfUnitType) {
+                    if (Mathf.dst(unit.x, unit.y, u.x, u.y) <= detectRange) {
+                        ((YellowDwarfUnitType) u.type).hasDysonSwarm = true;
+                    }
+                }
+            }
+
+            // 2. 头上按键点击检测（玩家控制时）
+            if (unit.controller() instanceof Player) {
+                if (Core.input.isTapped()) {
+                    Vec2 mouse = Core.input.mouseWorld();
+                    float btnY = unit.y + 30f; // 按钮在头顶
+                    if (Mathf.dst(mouse.x, mouse.y, unit.x, btnY) < 12f) {
+                        // 开启30秒无敌
+                        unit.apply(StatusEffects.invincible, 30f * 60f);
+                        if (DEBUG) Log.info("[PulsarMod] 戴森工程师开启30秒无敌！");
+                    }
+                }
+            }
+        }
+
+        @Override
+        public void draw(Unit unit) {
+            Draw.reset();
+            float x = unit.x, y = unit.y;
+
+            // 主体
+            Draw.z(100f);
+            Draw.color(Color.valueOf("4488ff"));
+            Fill.circle(x, y, 8f);
+            Draw.color(Color.valueOf("aaddff"));
+            Fill.circle(x, y, 4f);
+
+            // ✅ 头顶可互动按键
+            float btnY = y + 30f;
+            Draw.z(120f);
+            Draw.color(Color.valueOf("ffd700")); // 金色按钮
+            Fill.circle(x, btnY, 6f);
+            Draw.color(Color.white);
+            Fill.circle(x, btnY, 3f);
+
+            // 按钮提示圈（脉动）
+            float pulse = (Mathf.sin(Time.time, 15f, 1f) + 1f) * 0.5f;
+            Draw.color(Color.valueOf("ffd700"), 0.3f + pulse * 0.2f);
+            Lines.stroke(1f);
+            Lines.circle(x, btnY, 8f + pulse * 3f);
+
+            Draw.reset();
+            Draw.z(0f);
         }
     }
 }
