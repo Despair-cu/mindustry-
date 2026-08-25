@@ -1,13 +1,8 @@
 package redteamai;
 
+import arc.Core;
 import arc.graphics.Color;
-import arc.graphics.Pixmap;
-import arc.graphics.Texture;
 import arc.graphics.g2d.TextureRegion;
-
-// 修正：Core 在 mindustry 根包下，不是 mindustry.core
-import mindustry.Core;
-
 import mindustry.entities.abilities.ForceFieldAbility;
 import mindustry.entities.abilities.RepairFieldAbility;
 import mindustry.entities.abilities.ShieldRegenFieldAbility;
@@ -35,9 +30,14 @@ public class AllUnitsMod extends Mod {
     public static UnitType rainbowTitanUnit, emeraldCommanderUnit;
 
     // ==================== Pixmap 辅助方法 ====================
+    // 注意：这里用 arc.graphics.Pixmap 的全限定名，避免 import 歧义
 
-    /** 自己实现的椭圆填充（arc.graphics.Pixmap 没有这个方法） */
-    private void fillEllipse(Pixmap pix, int x, int y, int width, int height) {
+    private void setColor(arc.graphics.Pixmap pix, Color c) {
+        pix.setColor(c);
+    }
+
+    /** 自己实现的椭圆填充 */
+    private void fillEllipse(arc.graphics.Pixmap pix, int x, int y, int width, int height) {
         int xc = x + width / 2;
         int yc = y + height / 2;
         int a = width / 2;
@@ -64,7 +64,7 @@ public class AllUnitsMod extends Mod {
     }
 
     /** 自己实现的三角形填充 */
-    private void fillTriangle(Pixmap pix, int x1, int y1, int x2, int y2, int x3, int y3) {
+    private void fillTriangle(arc.graphics.Pixmap pix, int x1, int y1, int x2, int y2, int x3, int y3) {
         int minX = Math.max(0, Math.min(x1, Math.min(x2, x3)));
         int maxX = Math.min(31, Math.max(x1, Math.max(x2, x3)));
         int minY = Math.max(0, Math.min(y1, Math.min(y2, y3)));
@@ -94,7 +94,7 @@ public class AllUnitsMod extends Mod {
 
     private TextureRegion generateSprite(String name, int mainColor, int accentColor, boolean isFly) {
         int size = 32;
-        Pixmap pix = new Pixmap(size, size);
+        arc.graphics.Pixmap pix = new arc.graphics.Pixmap(size, size);
         pix.fill(Color.valueOf("2a2a2a"));
 
         Color mc = new Color(mainColor);
@@ -118,7 +118,7 @@ public class AllUnitsMod extends Mod {
         pix.setColor(ac);
         pix.drawRect(0, 0, size - 1, size - 1);
 
-        TextureRegion region = new TextureRegion(new Texture(pix));
+        TextureRegion region = new TextureRegion(new arc.graphics.Texture(pix));
         Core.atlas.addRegion(name, region);
         pix.dispose();
         return region;
@@ -126,7 +126,7 @@ public class AllUnitsMod extends Mod {
 
     private TextureRegion generateSpecialSprite(String name, int mainColor, int accentColor, int type) {
         int size = 32;
-        Pixmap pix = new Pixmap(size, size);
+        arc.graphics.Pixmap pix = new arc.graphics.Pixmap(size, size);
         pix.fill(Color.valueOf("2a2a2a"));
 
         Color mc = new Color(mainColor);
@@ -184,7 +184,6 @@ public class AllUnitsMod extends Mod {
                 pix.fillRect(14, 18, 4, 2);
                 break;
             case 7:
-                // 调用自己实现的 fillEllipse
                 fillEllipse(pix, 4, 8, 24, 16);
                 pix.setColor(ac);
                 pix.fillRect(0, 14, 6, 4);
@@ -225,9 +224,9 @@ public class AllUnitsMod extends Mod {
                 fillTriangle(pix, 16, 4, 8, 10, 8, 22);
                 pix.setColor(Color.valueOf("FFAA00"));
                 for (int i = 0; i < 5; i++) {
-                    int x = 10 + (i % 3) * 6;
-                    int y = 8 + (i / 3) * 8;
-                    pix.fillCircle(x, y, 2);
+                    int cx = 10 + (i % 3) * 6;
+                    int cy = 8 + (i / 3) * 8;
+                    pix.fillCircle(cx, cy, 2);
                 }
                 break;
             case 12:
@@ -254,9 +253,9 @@ public class AllUnitsMod extends Mod {
                 pix.setColor(Color.valueOf("FF5500"));
                 for (int i = 0; i < 6; i++) {
                     float angle = i * 60f + 30;
-                    int x = (int)(16 + 14 * Math.cos(angle * Math.PI / 180));
-                    int y = (int)(16 + 14 * Math.sin(angle * Math.PI / 180));
-                    pix.fillCircle(x, y, 2);
+                    int cx = (int)(16 + 14 * Math.cos(angle * Math.PI / 180));
+                    int cy = (int)(16 + 14 * Math.sin(angle * Math.PI / 180));
+                    pix.fillCircle(cx, cy, 2);
                 }
                 break;
             case 15:
@@ -285,16 +284,16 @@ public class AllUnitsMod extends Mod {
                 pix.fillCircle(16, 16, 3);
                 for (int i = 0; i < 8; i++) {
                     float angle = i * 45f;
-                    int x = (int)(16 + 12 * Math.cos(angle * Math.PI / 180));
-                    int y = (int)(16 + 12 * Math.sin(angle * Math.PI / 180));
-                    pix.fillCircle(x, y, 2);
+                    int cx = (int)(16 + 12 * Math.cos(angle * Math.PI / 180));
+                    int cy = (int)(16 + 12 * Math.sin(angle * Math.PI / 180));
+                    pix.fillCircle(cx, cy, 2);
                 }
                 break;
         }
 
         pix.setColor(ac);
         pix.drawRect(0, 0, size - 1, size - 1);
-        TextureRegion region = new TextureRegion(new Texture(pix));
+        TextureRegion region = new TextureRegion(new arc.graphics.Texture(pix));
         Core.atlas.addRegion(name, region);
         pix.dispose();
         return region;
