@@ -3,13 +3,12 @@ plugins {
 }
 
 repositories {
+    flatDir { dirs 'libs' }
     mavenCentral()
-    maven { url "https://maven.anuken.dev/" }
 }
 
 dependencies {
-    compileOnly "com.github.Anuken:Arc:arc-core-SNAPSHOT"
-    compileOnly "com.github.Anuken.Mindustry:core:SNAPSHOT"
+    compileOnly fileTree(dir: 'libs', includes: ['*.jar'])
 }
 
 jar {
