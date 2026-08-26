@@ -28,12 +28,10 @@ public class PulsarModMain extends Mod {
         new YellowDwarfUnitType("yellow-dwarf").load();
         new BluePulsarUnitType("blue-pulsar").load();
         new BlackHoleUnitType("black-hole").load();
-        // 注册新的"不稳定引力波"
         new UnstableGravityWaveUnitType("unstable-gravity-wave").load();
         Log.info("[PulsarMod] 所有单位注册完成");
     }
 
-    // ==================== 黄矮星 ====================
     public static class YellowDwarfUnitType extends UnitType {
         private final Color coreColor = Color.valueOf("ffd37f");
         private final Color outerColor = Color.valueOf("ff9d00");
@@ -89,7 +87,6 @@ public class PulsarModMain extends Mod {
         }
     }
 
-    // ==================== 中子星 ====================
     public static class BluePulsarUnitType extends UnitType {
         private final Color coreColor = Color.valueOf("00e5ff");
         private final Color outerColor = Color.valueOf("0099cc");
@@ -181,7 +178,6 @@ public class PulsarModMain extends Mod {
         }
     }
 
-    // ==================== 黑洞 ====================
     public static class BlackHoleUnitType extends UnitType {
         private final float baseRadius = 6f;
         private final float gravityRange = 350f, gravityStrength = 5.0f;
@@ -300,11 +296,6 @@ public class PulsarModMain extends Mod {
         }
     }
 
-    // ==================== 不稳定引力波 ====================
-    
-    /**
-     * 自定义实体类：存储引力波的独立状态，避免多单位共享 UnitType 变量。
-     */
     public static class UnstableGravityWaveUnitEntity extends UnitEntity {
         public float shockwaveTimer = 0f;
         public boolean shockwaveActive = false;
@@ -315,20 +306,24 @@ public class PulsarModMain extends Mod {
     }
 
     public static class UnstableGravityWaveUnitType extends UnitType {
-        private final Color ringColor = Color.valueOf("b06bff"); // 紫色系
-        private final float baseRadius = 22f;
-        private final float shockwaveInterval = 10f * 60f; // 10秒（基于60FPS）
+        private final Color coreColor = Color.valueOf("ff4040");
+        private final Color outerColor = Color.valueOf("cc0000");
+        private final Color jetColor = Color.valueOf("ff4040");
+        private final float baseRadius = 5f;
+        private final int particleCount = 400;
+        private final float particleSpeed = 30f, jetLength = 1000f, dps = 150f;
+        private final float gravityRange = 180f, gravityStrength = 4.0f;
+        private final float shockwaveInterval = 10f * 60f;
         private final float shockwaveSpeed = 150f;
         private final float shockwaveThickness = 20f;
         private final float shockwaveMaxRadius = 10000f;
 
         public UnstableGravityWaveUnitType(String name) {
             super(name);
-            health = Integer.MAX_VALUE; speed = 0f; rotateSpeed = 8f;
-            hitSize = baseRadius * 2f;
-            // 使用自定义实体
-            constructor = UnstableGravityWaveUnitEntity::create;
+            health = Integer.MAX_VALUE; speed = 0f; rotateSpeed = 12f;
+            hitSize = baseRadius * 2f; constructor = UnstableGravityWaveUnitEntity::create;
             weapons = new Seq<>(); outlineColor = Color.valueOf("00000000");
+            region = Core.atlas.find("clear"); drawBody = false; drawCell = false;
             localizedName = "不稳定引力波";
         }
 
@@ -338,9 +333,30 @@ public class PulsarModMain extends Mod {
             UnstableGravityWaveUnitEntity entity = (UnstableGravityWaveUnitEntity) unit;
 
             unit.health = health;
-            entity.shockwaveTimer += Time.delta;
+            float swing = Mathf.sin(Time.time, 25f, 8f);
+            float damage = dps * Time.delta;
+            for (int sign : new int[]{1, -1}) {
+                float a = (sign > 0 ? 0f : 180f) + swing;
+                float ex = unit.x + Angles.trnsx(a, jetLength);
+                float ey = unit.y + Angles.trnsy(a, jetLength);
+                for (Unit u : Groups.unit) {
+                    if (u == null || u.dead || u.team == unit.team) continue;
+                    if (distanceToSegment(u.x, u.y, unit.x, unit.y, ex, ey) <= 4f + u.hitSize)
+                        u.damage(damage);
+                }
+            }
+            for (Unit u : Groups.unit) {
+                if (u == null || u.dead || u.team == unit.team) continue;
+                float dst = Mathf.dst(unit.x, unit.y, u.x, u.y);
+                if (dst < gravityRange) {
+                    float angle = Angles.angle(unit.x, unit.y, u.x, u.y);
+                    u.x -= Angles.trnsx(angle, gravityStrength);
+                    u.y -= Angles.trnsy(angle, gravityStrength);
+                }
+                if (dst <= unit.hitSize + u.hitSize + 5f) { u.kill(); }
+            }
 
-            // 每10秒释放一次引力波
+            entity.shockwaveTimer += Time.delta;
             if (!entity.shockwaveActive && entity.shockwaveTimer >= shockwaveInterval) {
                 entity.shockwaveActive = true;
                 entity.shockwaveRadius = unit.hitSize;
@@ -354,14 +370,11 @@ public class PulsarModMain extends Mod {
                 entity.prevRadius = entity.shockwaveRadius;
                 entity.shockwaveRadius += shockwaveSpeed * (Time.delta / 60f);
 
-                // 检测单位
                 for (Unit u : Groups.unit) {
                     if (u == null || u.dead || u.team == unit.team) continue;
-                    // 忽略其他恒星/引力波单位
                     if (u.type instanceof YellowDwarfUnitType || u.type instanceof BluePulsarUnitType ||
                         u.type instanceof BlackHoleUnitType || u.type instanceof UnstableGravityWaveUnitType) continue;
                     if (entity.hitUnits.contains(u)) continue;
-
                     float dst = Mathf.dst(unit.x, unit.y, u.x, u.y);
                     if (dst >= entity.prevRadius && dst <= entity.shockwaveRadius + shockwaveThickness) {
                         if (!isBlockedByShield(entity, u.x, u.y)) {
@@ -371,11 +384,9 @@ public class PulsarModMain extends Mod {
                     }
                 }
 
-                // 检测建筑
                 for (Building b : Groups.build) {
                     if (b == null || !b.isValid() || b.team == unit.team) continue;
                     if (entity.hitBuildings.contains(b)) continue;
-
                     float dst = Mathf.dst(unit.x, unit.y, b.x, b.y);
                     if (dst >= entity.prevRadius && dst <= entity.shockwaveRadius + shockwaveThickness) {
                         if (!isBlockedByShield(entity, b.x, b.y)) {
@@ -385,7 +396,6 @@ public class PulsarModMain extends Mod {
                     }
                 }
 
-                // 超出最大范围后重置
                 if (entity.shockwaveRadius > shockwaveMaxRadius) {
                     entity.shockwaveActive = false;
                     entity.shockwaveTimer = 0f;
@@ -393,9 +403,6 @@ public class PulsarModMain extends Mod {
             }
         }
 
-        /**
-         * 检测目标是否被护盾/力墙阻挡（修复版）
-         */
         private boolean isBlockedByShield(UnstableGravityWaveUnitEntity entity, float tx, float ty) {
             float sx = entity.x, sy = entity.y;
             float totalDist = Mathf.dst(sx, sy, tx, ty);
@@ -406,7 +413,7 @@ public class PulsarModMain extends Mod {
                 ShieldWall.ShieldWallBuild shield = null;
                 if (b instanceof ShieldWall.ShieldWallBuild) {
                     shield = (ShieldWall.ShieldWallBuild) b;
-                    if (shield.shield <= 0) continue; // 护盾已破，不阻挡
+                    if (shield.shield <= 0) continue;
                 } else {
                     String bn = b.block.name.toLowerCase();
                     if (!(bn.contains("shield") || bn.contains("force") ||
@@ -416,19 +423,15 @@ public class PulsarModMain extends Mod {
                 float shieldRadius = shield != null ? shield.shieldRadius : 60f;
                 float distToSource = Mathf.dst(sx, sy, b.x, b.y);
 
-                // 护盾必须在源点和目标之间，且与引力波圆环相交
                 if (distToSource < totalDist) {
                     if (distToSource <= entity.shockwaveRadius + shieldRadius &&
                         distToSource + shieldRadius >= entity.prevRadius) {
-                        
-                        // 对护盾造成持续伤害（每秒500点）
                         if (shield != null) {
                             shield.shield -= 500f * Time.delta;
                             if (shield.shield <= 0f) shield.breakTimer = 1f;
                         } else {
                             b.damage(500f * Time.delta);
                         }
-                        
                         if (DEBUG) Log.info("[PulsarMod] 力墙挡下引力波！");
                         return true;
                     }
@@ -444,39 +447,64 @@ public class PulsarModMain extends Mod {
 
             Draw.reset();
             float x = unit.x, y = unit.y, time = Time.time;
+            Draw.z(85f);
+            float swing = Mathf.sin(time, 25f, 8f);
+            drawNeutronJet(x, y, 0f + swing, time, unit.id);
+            drawNeutronJet(x, y, 180f + swing, time, unit.id + 1000);
+            Draw.z(110f);
+            Draw.color(coreColor); Fill.circle(x, y, baseRadius * 1.5f);
+            Fill.circle(x, y, baseRadius * 0.5f);
 
-            // 绘制引力波圆环
             if (entity.shockwaveActive) {
                 Draw.z(130f);
                 float alpha = 0.5f * (1f - entity.shockwaveRadius / shockwaveMaxRadius);
-                Draw.color(ringColor, alpha * 2f);
+                Draw.color(coreColor, alpha * 2f);
                 Lines.stroke(shockwaveThickness);
                 Lines.circle(x, y, entity.shockwaveRadius);
-                
                 Draw.color(Color.white, alpha * 1.5f);
                 Lines.stroke(3f + Mathf.sin(time * 10f) * 2f);
                 Lines.circle(x, y, entity.shockwaveRadius);
-                
                 for (int i = 0; i < 48; i++) {
                     float a = time * 3f + i * 7.5f;
                     float px = x + Angles.trnsx(a, entity.shockwaveRadius);
                     float py = y + Angles.trnsy(a, entity.shockwaveRadius);
-                    Draw.color(ringColor, alpha * 2f);
+                    Draw.color(coreColor, alpha * 2f);
                     Fill.circle(px, py, 3f + Mathf.sin(time * 5f + i) * 2f);
                 }
-                Draw.reset();
             }
 
-            // 绘制核心
-            Draw.z(110f);
-            Draw.color(ringColor);
-            Fill.circle(x, y, baseRadius * 1.5f);
-            Fill.circle(x, y, baseRadius * 0.5f);
-            Draw.color(Color.white, ringColor, 0.5f + Mathf.sin(time, 8f, 0.5f));
-            Fill.circle(x, y, baseRadius * 0.8f);
+            Draw.reset(); Draw.z(0f);
+        }
 
-            Draw.reset();
-            Draw.z(0f);
+        private void drawNeutronJet(float x, float y, float angle, float time, long seed) {
+            float spacing = 3.0f; float travel = time * particleSpeed;
+            Mathf.rand.setSeed(seed);
+            for (int i = 0; i < particleCount; i++) {
+                float dist = (travel + i * spacing) % jetLength;
+                float t = dist / jetLength;
+                float spread = t * 3f;
+                float offset = Mathf.rand.random(-spread, spread);
+                float a = angle + offset;
+                float px = x + Angles.trnsx(a, dist);
+                float py = y + Angles.trnsy(a, dist);
+                Color c;
+                if (t < 0.2f) c = Color.white.lerp(jetColor, t / 0.2f);
+                else if (t < 0.7f) c = jetColor;
+                else c = jetColor.lerp(outerColor, (t - 0.7f) / 0.3f);
+                float flicker = (Mathf.sin(dist * 0.15f - time * 0.4f) + 1f) / 2f;
+                float alpha = (1f - t * 0.8f) * (0.5f + flicker * 0.5f);
+                float size = (1.0f - t * 0.6f) * Mathf.rand.random(0.7f, 1.2f);
+                size = Math.max(size, 0.15f);
+                Draw.color(c, alpha); Fill.circle(px, py, size);
+            }
+            Mathf.rand.setSeed(0);
+        }
+
+        private float distanceToSegment(float px, float py, float x1, float y1, float x2, float y2) {
+            float dx = x2 - x1, dy = y2 - y1; float len2 = dx * dx + dy * dy;
+            if (len2 < 0.0001f) return Mathf.dst(px, py, x1, y1);
+            float t = ((px - x1) * dx + (py - y1) * dy) / len2; t = Mathf.clamp(t, 0f, 1f);
+            return Mathf.dst(px, py, x1 + t * dx, y1 + t * dy);
         }
     }
 }
