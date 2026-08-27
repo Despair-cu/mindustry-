@@ -296,16 +296,16 @@ public class PulsarModMain extends Mod {
     }
 
     // ============================================================
-    // 不稳定引力波（粒子版：500粒子，线段碰撞修复穿透）
+    // 不稳定引力波（粒子版：750粒子，速度200，矩形碰撞）
     // ============================================================
     public static class ShockwaveUnitType extends UnitType {
         private final Color ringColor = Color.valueOf("00e5ff");
         private final float baseRadius = 22f;
         private final float shockwaveInterval = 5f * 60f;
-        private final float particleSpeed = 400f;
+        private final float particleSpeed = 200f;       // 之前400，现在200
         private final float particleMaxDistance = 1800f;
         private final float wallDamage = 1000f;
-        private final int particlesPerWave = 500;
+        private final int particlesPerWave = 750;       // 之前500，现在750
 
         private float shockwaveTimer = 0f;
         private final Seq<ShockwaveParticle> particles = new Seq<>();
@@ -318,10 +318,8 @@ public class PulsarModMain extends Mod {
             boolean dead;
 
             ShockwaveParticle(float x, float y, float angle) {
-                this.x = x;
-                this.y = y;
-                this.prevX = x;
-                this.prevY = y;
+                this.x = x; this.y = y;
+                this.prevX = x; this.prevY = y;
                 this.angle = angle;
                 this.distTraveled = 0f;
                 this.dead = false;
@@ -360,27 +358,22 @@ public class PulsarModMain extends Mod {
                 p.x += Angles.trnsx(p.angle, moveAmount);
                 p.y += Angles.trnsy(p.angle, moveAmount);
 
-                // --- 碰撞检测：单位（秒杀，粒子继续飞）---
+                // --- 单位：秒杀，粒子继续飞 ---
                 for (Unit u : Groups.unit) {
                     if (u == null || u.dead || u.team == unit.team) continue;
                     if (u.type instanceof YellowDwarfUnitType || u.type instanceof BluePulsarUnitType ||
                         u.type instanceof BlackHoleUnitType || u.type instanceof ShockwaveUnitType) continue;
-
-                    float hitDst = u.hitSize + 3f;
-                    if (Mathf.dst(p.x, p.y, u.x, u.y) <= hitDst) {
+                    if (Mathf.dst(p.x, p.y, u.x, u.y) <= u.hitSize + 3f) {
                         u.kill();
                     }
                 }
 
-                // --- 碰撞检测：建筑（线段检测，防穿透）---
+                // --- 建筑：矩形 bounds 检测 ---
                 for (Building b : Groups.build) {
                     if (b == null || !b.isValid()) continue;
                     if (b.team == unit.team) continue;
 
-                    float blockRadius = b.block.size * 4f + 3f;
-                    float distToPath = distanceToSegment(b.x, b.y, p.prevX, p.prevY, p.x, p.y);
-
-                    if (distToPath <= blockRadius) {
+                    if (segmentIntersectsRect(p.prevX, p.prevY, p.x, p.y, b)) {
                         if (b.health <= wallDamage) {
                             b.kill();
                         } else {
@@ -399,20 +392,41 @@ public class PulsarModMain extends Mod {
             particles.removeAll(p -> p.dead);
         }
 
-        private static float distanceToSegment(float px, float py, float x1, float y1, float x2, float y2) {
-            float dx = x2 - x1, dy = y2 - y1;
-            float len2 = dx * dx + dy * dy;
-            if (len2 < 0.0001f) return Mathf.dst(px, py, x1, y1);
-            float t = ((px - x1) * dx + (py - y1) * dy) / len2;
-            t = Mathf.clamp(t, 0f, 1f);
-            return Mathf.dst(px, py, x1 + t * dx, y1 + t * dy);
+        private boolean segmentIntersectsRect(float px1, float py1, float px2, float py2, Building b) {
+            float half = b.block.size * 4f;
+            float rx = b.x - half, ry = b.y - half;
+            float rw = half * 2f, rh = half * 2f;
+
+            float cx = (px1 + px2) * 0.5f, cy = (py1 + py2) * 0.5f;
+            float expand = half + Mathf.dst(px1, py1, px2, py2) * 0.5f;
+            if (Mathf.dst(cx, cy, b.x, b.y) > expand + Math.max(half, half)) return false;
+
+            return segmentIntersectsSegment(px1, py1, px2, py2, rx, ry, rx + rw, ry)
+                || segmentIntersectsSegment(px1, py1, px2, py2, rx, ry + rh, rx + rw, ry + rh)
+                || segmentIntersectsSegment(px1, py1, px2, py2, rx, ry, rx, ry + rh)
+                || segmentIntersectsSegment(px1, py1, px2, py2, rx + rw, ry, rx + rw, ry + rh)
+                || (px1 >= rx && px1 <= rx + rw && py1 >= ry && py1 <= ry + rh);
+        }
+
+        private boolean segmentIntersectsSegment(float x1, float y1, float x2, float y2,
+                                                  float x3, float y3, float x4, float y4) {
+            float d1 = cross(x2 - x1, y2 - y1, x3 - x1, y3 - y1);
+            float d2 = cross(x2 - x1, y2 - y1, x4 - x1, y4 - y1);
+            float d3 = cross(x4 - x3, y4 - y3, x1 - x3, y1 - y3);
+            float d4 = cross(x4 - x3, y4 - y3, x2 - x3, y2 - y3);
+            if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) &&
+                ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) return true;
+            return false;
+        }
+
+        private float cross(float ax, float ay, float bx, float by) {
+            return ax * by - ay * bx;
         }
 
         @Override
         public void draw(Unit unit) {
             Draw.reset();
             float x = unit.x, y = unit.y, time = Time.time;
-
             for (ShockwaveParticle p : particles) {
                 Draw.z(130f);
                 Draw.color(ringColor);
@@ -420,14 +434,12 @@ public class PulsarModMain extends Mod {
                 Draw.color(Color.white, 0.8f);
                 Fill.circle(p.x, p.y, 1.2f);
             }
-
             Draw.z(110f);
             Draw.color(ringColor);
             Fill.circle(x, y, baseRadius * 1.5f);
             Fill.circle(x, y, baseRadius * 0.5f);
             Draw.color(Color.white, ringColor, 0.5f + Mathf.sin(time, 8f, 0.5f));
             Fill.circle(x, y, baseRadius * 0.8f);
-
             Draw.reset();
             Draw.z(0f);
         }
