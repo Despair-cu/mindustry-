@@ -1,7 +1,6 @@
 package redteamai;
 
 import arc.Core;
-import arc.Events;
 import arc.graphics.Color;
 import arc.graphics.g2d.Draw;
 import arc.graphics.g2d.Fill;
@@ -11,7 +10,6 @@ import arc.math.Mathf;
 import arc.struct.Seq;
 import arc.util.Log;
 import arc.util.Time;
-import mindustry.game.EventType.RenderEvent;
 import mindustry.gen.Building;
 import mindustry.gen.Groups;
 import mindustry.gen.Unit;
@@ -298,7 +296,7 @@ public class PulsarModMain extends Mod {
     }
 
     // ============================================================
-    // 不稳定引力波（v8 159.7 兼容版）
+    // 不稳定引力波（简洁版：draw()内绘制，不折腾全局渲染）
     // ============================================================
     public static class ShockwaveUnitType extends UnitType {
         private final Color ringColor = Color.valueOf("00e5ff");
@@ -312,21 +310,14 @@ public class PulsarModMain extends Mod {
         private float shockwaveTimer = 0f;
         private final Seq<Shockwave> activeWaves = new Seq<>();
 
-        // 静态全局波列表 + 渲染器（v8：用 RenderEvent.class）
-        private static final Seq<Shockwave> allWavesGlobal = new Seq<>();
-        private static boolean rendererRegistered = false;
-
         private static class Shockwave {
             float radius;
-            float x, y;
             Seq<Unit> hitUnits = new Seq<>();
             Seq<Building> hitBuildings = new Seq<>();
             Seq<Building> blockedByBuildings = new Seq<>();
 
-            Shockwave(float startRadius, float cx, float cy) {
+            Shockwave(float startRadius) {
                 this.radius = startRadius;
-                this.x = cx;
-                this.y = cy;
             }
         }
 
@@ -336,35 +327,6 @@ public class PulsarModMain extends Mod {
             hitSize = baseRadius * 2f; constructor = UnitEntity::create;
             weapons = new Seq<>(); outlineColor = Color.valueOf("00000000");
             localizedName = "冲击波星";
-
-            if (!rendererRegistered) {
-                rendererRegistered = true;
-                // v8 正确写法：Events.on(Class<T>, Cons<T>)
-                Events.on(RenderEvent.class, event -> {
-                    Draw.reset();
-                    float time = Time.time;
-                    for (Shockwave wave : allWavesGlobal) {
-                        if (wave == null) continue;
-                        Draw.z(130f);
-                        float alpha = 0.5f * (1f - wave.radius / 1800f);
-                        Draw.color(Color.valueOf("00e5ff"), alpha * 2f);
-                        Lines.stroke(20f);
-                        Lines.circle(wave.x, wave.y, wave.radius);
-                        Draw.color(Color.white, alpha * 1.5f);
-                        Lines.stroke(3f + Mathf.sin(time * 10f) * 2f);
-                        Lines.circle(wave.x, wave.y, wave.radius);
-                        for (int i = 0; i < 48; i++) {
-                            float a = time * 3f + i * 7.5f;
-                            float px = wave.x + Angles.trnsx(a, wave.radius);
-                            float py = wave.y + Angles.trnsy(a, wave.radius);
-                            Draw.color(Color.valueOf("00e5ff"), alpha * 2f);
-                            Fill.circle(px, py, 3f + Mathf.sin(time * 5f + i) * 2f);
-                        }
-                    }
-                    Draw.reset();
-                    Draw.z(0f);
-                });
-            }
         }
 
         @Override
@@ -374,9 +336,8 @@ public class PulsarModMain extends Mod {
 
             if (shockwaveTimer >= shockwaveInterval) {
                 shockwaveTimer = 0f;
-                Shockwave wave = new Shockwave(unit.hitSize, unit.x, unit.y);
+                Shockwave wave = new Shockwave(unit.hitSize);
                 activeWaves.add(wave);
-                allWavesGlobal.add(wave);
 
                 float sx = unit.x, sy = unit.y;
 
@@ -401,6 +362,7 @@ public class PulsarModMain extends Mod {
                 if (DEBUG) Log.info("[PulsarMod] 新冲击波生成！当前活跃波数: " + activeWaves.size);
             }
 
+            // 更新所有活跃的波
             activeWaves.removeAll(wave -> {
                 float prevRadius = wave.radius;
                 wave.radius += shockwaveSpeed * (Time.delta / 60f);
@@ -431,11 +393,7 @@ public class PulsarModMain extends Mod {
                     return false;
                 });
 
-                if (wave.radius > shockwaveMaxRadius) {
-                    allWavesGlobal.remove(wave);
-                    return true;
-                }
-                return false;
+                return wave.radius > shockwaveMaxRadius;
             });
         }
 
@@ -469,12 +427,35 @@ public class PulsarModMain extends Mod {
         public void draw(Unit unit) {
             Draw.reset();
             float x = unit.x, y = unit.y, time = Time.time;
+
+            // 绘制所有活跃的波圈（和本体一起画，简单粗暴）
+            for (Shockwave wave : activeWaves) {
+                if (wave == null) continue;
+                Draw.z(130f);
+                float alpha = 0.5f * (1f - wave.radius / shockwaveMaxRadius);
+                Draw.color(ringColor, alpha * 2f);
+                Lines.stroke(shockwaveThickness);
+                Lines.circle(x, y, wave.radius);
+                Draw.color(Color.white, alpha * 1.5f);
+                Lines.stroke(3f + Mathf.sin(time * 10f) * 2f);
+                Lines.circle(x, y, wave.radius);
+                for (int i = 0; i < 48; i++) {
+                    float a = time * 3f + i * 7.5f;
+                    float px = x + Angles.trnsx(a, wave.radius);
+                    float py = y + Angles.trnsy(a, wave.radius);
+                    Draw.color(ringColor, alpha * 2f);
+                    Fill.circle(px, py, 3f + Mathf.sin(time * 5f + i) * 2f);
+                }
+            }
+
+            // 绘制本体核心
             Draw.z(110f);
             Draw.color(ringColor);
             Fill.circle(x, y, baseRadius * 1.5f);
             Fill.circle(x, y, baseRadius * 0.5f);
             Draw.color(Color.white, ringColor, 0.5f + Mathf.sin(time, 8f, 0.5f));
             Fill.circle(x, y, baseRadius * 0.8f);
+
             Draw.reset();
             Draw.z(0f);
         }
