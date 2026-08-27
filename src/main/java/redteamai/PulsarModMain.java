@@ -1,6 +1,7 @@
 package redteamai;
 
 import arc.Core;
+import arc.Events;
 import arc.graphics.Color;
 import arc.graphics.g2d.Draw;
 import arc.graphics.g2d.Fill;
@@ -10,14 +11,13 @@ import arc.math.Mathf;
 import arc.struct.Seq;
 import arc.util.Log;
 import arc.util.Time;
+import mindustry.game.EventType.RenderEvent;
 import mindustry.gen.Building;
 import mindustry.gen.Groups;
 import mindustry.gen.Unit;
 import mindustry.gen.UnitEntity;
 import mindustry.mod.Mod;
 import mindustry.type.UnitType;
-import mindustry.world.blocks.defense.BaseShield;
-import mindustry.world.blocks.defense.ShieldWall;
 
 public class PulsarModMain extends Mod {
 
@@ -298,29 +298,33 @@ public class PulsarModMain extends Mod {
     }
 
     // ============================================================
-    // 不稳定引力波（修改版：恒定5秒一波、多波同屏、盾墙/护盾投影阻挡）
+    // 不稳定引力波（最终版：建筑伤1000，单位秒杀）
     // ============================================================
     public static class ShockwaveUnitType extends UnitType {
         private final Color ringColor = Color.valueOf("00e5ff");
         private final float baseRadius = 22f;
-        private final float shockwaveInterval = 5f * 60f; // 恒定5秒
-        private final float shockwaveSpeed = 400f;        // 波扩散速度
+        private final float shockwaveInterval = 5f * 60f;
+        private final float shockwaveSpeed = 400f;
         private final float shockwaveThickness = 20f;
-        private final float shockwaveMaxRadius = 1800f;   // 最大半径（4.5秒扩散完）
-        private final float shockwaveDamage = 5000f;
+        private final float shockwaveMaxRadius = 1800f;
+        private final float wallDamage = 1000f; // 建筑伤害 1000
 
         private float shockwaveTimer = 0f;
         private final Seq<Shockwave> activeWaves = new Seq<>();
+        private static final Seq<Shockwave> allWavesGlobal = new Seq<>();
+        private static boolean rendererRegistered = false;
 
-        // 内部类：存储每一波冲击波的状态
         private static class Shockwave {
             float radius;
+            float x, y;
             Seq<Unit> hitUnits = new Seq<>();
             Seq<Building> hitBuildings = new Seq<>();
-            Seq<Building> consumedShields = new Seq<>();
+            Seq<Building> blockedByBuildings = new Seq<>();
 
-            Shockwave(float startRadius) {
+            Shockwave(float startRadius, float cx, float cy) {
                 this.radius = startRadius;
+                this.x = cx;
+                this.y = cy;
             }
         }
 
@@ -330,6 +334,34 @@ public class PulsarModMain extends Mod {
             hitSize = baseRadius * 2f; constructor = UnitEntity::create;
             weapons = new Seq<>(); outlineColor = Color.valueOf("00000000");
             localizedName = "冲击波星";
+
+            if (!rendererRegistered) {
+                rendererRegistered = true;
+                Events.on(RenderEvent.class, e -> {
+                    Draw.reset();
+                    float time = Time.time;
+                    for (Shockwave wave : allWavesGlobal) {
+                        if (wave == null) continue;
+                        Draw.z(130f);
+                        float alpha = 0.5f * (1f - wave.radius / 1800f);
+                        Draw.color(Color.valueOf("00e5ff"), alpha * 2f);
+                        Lines.stroke(20f);
+                        Lines.circle(wave.x, wave.y, wave.radius);
+                        Draw.color(Color.white, alpha * 1.5f);
+                        Lines.stroke(3f + Mathf.sin(time * 10f) * 2f);
+                        Lines.circle(wave.x, wave.y, wave.radius);
+                        for (int i = 0; i < 48; i++) {
+                            float a = time * 3f + i * 7.5f;
+                            float px = wave.x + Angles.trnsx(a, wave.radius);
+                            float py = wave.y + Angles.trnsy(a, wave.radius);
+                            Draw.color(Color.valueOf("00e5ff"), alpha * 2f);
+                            Fill.circle(px, py, 3f + Mathf.sin(time * 5f + i) * 2f);
+                        }
+                    }
+                    Draw.reset();
+                    Draw.z(0f);
+                });
+            }
         }
 
         @Override
@@ -337,30 +369,28 @@ public class PulsarModMain extends Mod {
             unit.health = health;
             shockwaveTimer += Time.delta;
 
-            // 每5秒生成一波新的冲击波
             if (shockwaveTimer >= shockwaveInterval) {
                 shockwaveTimer = 0f;
-                Shockwave wave = new Shockwave(unit.hitSize);
+                Shockwave wave = new Shockwave(unit.hitSize, unit.x, unit.y);
                 activeWaves.add(wave);
+                allWavesGlobal.add(wave);
 
                 float sx = unit.x, sy = unit.y;
 
-                // 标记敌方单位
                 for (Unit u : Groups.unit) {
                     if (u == null || u.dead || u.team == unit.team) continue;
                     if (u.type instanceof YellowDwarfUnitType || u.type instanceof BluePulsarUnitType ||
                         u.type instanceof BlackHoleUnitType || u.type instanceof ShockwaveUnitType) continue;
                     float dst = Mathf.dst(sx, sy, u.x, u.y);
-                    if (dst <= shockwaveMaxRadius && !isProtectedByShield(sx, sy, u.x, u.y, wave)) {
+                    if (dst <= shockwaveMaxRadius && !isBlockedByBuilding(sx, sy, u.x, u.y, wave)) {
                         wave.hitUnits.add(u);
                     }
                 }
 
-                // 标记敌方建筑
                 for (Building b : Groups.build) {
                     if (b == null || !b.isValid() || b.team == unit.team) continue;
                     float dst = Mathf.dst(sx, sy, b.x, b.y);
-                    if (dst <= shockwaveMaxRadius && !isProtectedByShield(sx, sy, b.x, b.y, wave)) {
+                    if (dst <= shockwaveMaxRadius && !isBlockedByBuilding(sx, sy, b.x, b.y, wave)) {
                         wave.hitBuildings.add(b);
                     }
                 }
@@ -368,92 +398,63 @@ public class PulsarModMain extends Mod {
                 if (DEBUG) Log.info("[PulsarMod] 新冲击波生成！当前活跃波数: " + activeWaves.size);
             }
 
-            // 更新所有活跃的波
             activeWaves.removeAll(wave -> {
                 float prevRadius = wave.radius;
                 wave.radius += shockwaveSpeed * (Time.delta / 60f);
 
-                // 处理单位伤害
+                // 单位：直接秒杀
                 wave.hitUnits.removeAll(u -> {
                     if (u == null || u.dead) return true;
                     float dst = Mathf.dst(unit.x, unit.y, u.x, u.y);
                     if (dst >= prevRadius && dst <= wave.radius + shockwaveThickness) {
-                        if (!isProtectedByShield(unit.x, unit.y, u.x, u.y, wave)) {
-                            u.damage(shockwaveDamage);
+                        if (!isBlockedByBuilding(unit.x, unit.y, u.x, u.y, wave)) {
+                            u.kill(); // 秒杀
                         }
                         return true;
                     }
                     return false;
                 });
 
-                // 处理建筑伤害
+                // 建筑：1000伤害
                 wave.hitBuildings.removeAll(b -> {
                     if (b == null || !b.isValid()) return true;
                     float dst = Mathf.dst(unit.x, unit.y, b.x, b.y);
                     if (dst >= prevRadius && dst <= wave.radius + shockwaveThickness) {
-                        if (!isProtectedByShield(unit.x, unit.y, b.x, b.y, wave)) {
-                            b.damage(shockwaveDamage);
+                        if (!isBlockedByBuilding(unit.x, unit.y, b.x, b.y, wave)) {
+                            b.damage(wallDamage);
                         }
                         return true;
                     }
                     return false;
                 });
 
-                // 波扩散完毕则移除
-                return wave.radius > shockwaveMaxRadius;
+                if (wave.radius > shockwaveMaxRadius) {
+                    allWavesGlobal.remove(wave);
+                    return true;
+                }
+                return false;
             });
         }
 
-        // 护盾/力墙阻挡检测（每波独立记录消耗的力墙）
-        private boolean isProtectedByShield(float sx, float sy, float tx, float ty, Shockwave wave) {
+        private boolean isBlockedByBuilding(float sx, float sy, float tx, float ty, Shockwave wave) {
+            float distSourceToTarget = Mathf.dst(sx, sy, tx, ty);
+
+            wave.blockedByBuildings.removeAll(b -> b == null || !b.isValid());
+
             for (Building b : Groups.build) {
                 if (b == null || !b.isValid()) continue;
-                if (wave.consumedShields.contains(b)) return true;
+                if (wave.blockedByBuildings.contains(b)) return true;
+                if (Mathf.dst(b.x, b.y, tx, ty) < 4f) continue;
 
-                float shieldR = 0f;
-                boolean isShieldBlock = false;
+                float blockRadius = b.block.size * 4f;
+                float distToTarget = Mathf.dst(b.x, b.y, tx, ty);
 
-                // 盾墙
-                if (b instanceof ShieldWall.ShieldWallBuild) {
-                    ShieldWall.ShieldWallBuild shield = (ShieldWall.ShieldWallBuild) b;
-                    if (b.power != null && b.power.status > 0f && shield.shield > 0) {
-                        shieldR = shield.shieldRadius;
-                        isShieldBlock = true;
-                    }
-                }
-                // 大型护盾投影 (BaseShield)
-                else if (b.block instanceof BaseShield) {
-                    if (b.power != null && b.power.status > 0f) {
-                        shieldR = ((BaseShield) b.block).radius;
-                        isShieldBlock = true;
-                    }
-                }
-                // 兜底：名称模糊匹配
-                else {
-                    String bn = b.block.name.toLowerCase();
-                    if (bn.contains("shield") || bn.contains("force") ||
-                        bn.contains("力墙") || bn.contains("防护") || bn.contains("护盾")) {
-                        shieldR = 60f;
-                        isShieldBlock = true;
-                    }
-                }
-
-                if (!isShieldBlock) continue;
-
-                // 目标在护盾范围内，且护盾在波的传播路径上
-                if (Mathf.dst(b.x, b.y, tx, ty) <= shieldR) {
+                if (distToTarget <= blockRadius) {
                     float distToSource = Mathf.dst(sx, sy, b.x, b.y);
-                    if (distToSource < Mathf.dst(sx, sy, tx, ty)) {
-                        // 消耗护盾
-                        if (b instanceof ShieldWall.ShieldWallBuild) {
-                            ShieldWall.ShieldWallBuild shield = (ShieldWall.ShieldWallBuild) b;
-                            shield.shield -= 200f;
-                            if (shield.shield <= 0f) shield.breakTimer = 1f;
-                        } else {
-                            b.damage(200f);
-                        }
-                        wave.consumedShields.add(b);
-                        if (DEBUG) Log.info("[PulsarMod] 护盾/力墙挡下冲击波！");
+                    if (distToSource < distSourceToTarget) {
+                        b.damage(wallDamage);
+                        wave.blockedByBuildings.add(b);
+                        if (DEBUG) Log.info("[PulsarMod] " + b.block.name + " 挡下了冲击波！");
                         return true;
                     }
                 }
@@ -465,34 +466,12 @@ public class PulsarModMain extends Mod {
         public void draw(Unit unit) {
             Draw.reset();
             float x = unit.x, y = unit.y, time = Time.time;
-
-            // 绘制所有活跃的波
-            for (Shockwave wave : activeWaves) {
-                Draw.z(130f);
-                float alpha = 0.5f * (1f - wave.radius / shockwaveMaxRadius);
-                Draw.color(ringColor, alpha * 2f);
-                Lines.stroke(shockwaveThickness);
-                Lines.circle(x, y, wave.radius);
-                Draw.color(Color.white, alpha * 1.5f);
-                Lines.stroke(3f + Mathf.sin(time * 10f) * 2f);
-                Lines.circle(x, y, wave.radius);
-                for (int i = 0; i < 48; i++) {
-                    float a = time * 3f + i * 7.5f;
-                    float px = x + Angles.trnsx(a, wave.radius);
-                    float py = y + Angles.trnsy(a, wave.radius);
-                    Draw.color(ringColor, alpha * 2f);
-                    Fill.circle(px, py, 3f + Mathf.sin(time * 5f + i) * 2f);
-                }
-            }
-
-            Draw.reset();
             Draw.z(110f);
             Draw.color(ringColor);
             Fill.circle(x, y, baseRadius * 1.5f);
             Fill.circle(x, y, baseRadius * 0.5f);
             Draw.color(Color.white, ringColor, 0.5f + Mathf.sin(time, 8f, 0.5f));
             Fill.circle(x, y, baseRadius * 0.8f);
-
             Draw.reset();
             Draw.z(0f);
         }
