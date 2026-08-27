@@ -1,9 +1,0 @@
-{
-  "name": "恒星系统",
-  "author": "d",
-  "description": "nbnbnbnbb",
-  "version": "1.0",
-  "main": "redteamai.PulsarModMain",
-  "minGameVersion": "159",
-  "java": true
-}
