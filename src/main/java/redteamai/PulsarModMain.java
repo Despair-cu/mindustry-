@@ -296,7 +296,7 @@ public class PulsarModMain extends Mod {
     }
 
     // ============================================================
-    // 不稳定引力波（粒子版：单位秒杀继续飞，建筑看血量）
+    // 不稳定引力波（粒子版：500粒子，线段碰撞修复穿透）
     // ============================================================
     public static class ShockwaveUnitType extends UnitType {
         private final Color ringColor = Color.valueOf("00e5ff");
@@ -305,13 +305,14 @@ public class PulsarModMain extends Mod {
         private final float particleSpeed = 400f;
         private final float particleMaxDistance = 1800f;
         private final float wallDamage = 1000f;
-        private final int particlesPerWave = 36; // 每10度一个粒子
+        private final int particlesPerWave = 500;
 
         private float shockwaveTimer = 0f;
         private final Seq<ShockwaveParticle> particles = new Seq<>();
 
         private static class ShockwaveParticle {
             float x, y;
+            float prevX, prevY;
             float angle;
             float distTraveled;
             boolean dead;
@@ -319,6 +320,8 @@ public class PulsarModMain extends Mod {
             ShockwaveParticle(float x, float y, float angle) {
                 this.x = x;
                 this.y = y;
+                this.prevX = x;
+                this.prevY = y;
                 this.angle = angle;
                 this.distTraveled = 0f;
                 this.dead = false;
@@ -338,26 +341,26 @@ public class PulsarModMain extends Mod {
             unit.health = health;
             shockwaveTimer += Time.delta;
 
-            // 每5秒发射一圈粒子
             if (shockwaveTimer >= shockwaveInterval) {
                 shockwaveTimer = 0f;
                 for (int i = 0; i < particlesPerWave; i++) {
-                    float angle = i * (360f / particlesPerWave);
+                    float angle = i * (360f / particlesPerWave) + Mathf.random(360f);
                     particles.add(new ShockwaveParticle(unit.x, unit.y, angle));
                 }
                 if (DEBUG) Log.info("[PulsarMod] 发射冲击波粒子！当前粒子数: " + particles.size);
             }
 
-            // 更新所有粒子
             for (ShockwaveParticle p : particles) {
                 if (p.dead) continue;
 
                 float moveAmount = particleSpeed * (Time.delta / 60f);
+                p.prevX = p.x;
+                p.prevY = p.y;
                 p.distTraveled += moveAmount;
                 p.x += Angles.trnsx(p.angle, moveAmount);
                 p.y += Angles.trnsy(p.angle, moveAmount);
 
-                // --- 碰撞检测：单位 ---
+                // --- 碰撞检测：单位（秒杀，粒子继续飞）---
                 for (Unit u : Groups.unit) {
                     if (u == null || u.dead || u.team == unit.team) continue;
                     if (u.type instanceof YellowDwarfUnitType || u.type instanceof BluePulsarUnitType ||
@@ -365,34 +368,44 @@ public class PulsarModMain extends Mod {
 
                     float hitDst = u.hitSize + 3f;
                     if (Mathf.dst(p.x, p.y, u.x, u.y) <= hitDst) {
-                        u.kill(); // 秒杀！粒子不消失，继续飞
+                        u.kill();
                     }
                 }
 
-                // --- 碰撞检测：建筑 ---
+                // --- 碰撞检测：建筑（线段检测，防穿透）---
                 for (Building b : Groups.build) {
-                    if (b == null || !b.isValid() || b.team == unit.team) continue;
+                    if (b == null || !b.isValid()) continue;
+                    if (b.team == unit.team) continue;
 
-                    float blockRadius = b.block.size * 4f;
-                    if (Mathf.dst(p.x, p.y, b.x, b.y) <= blockRadius + 3f) {
+                    float blockRadius = b.block.size * 4f + 3f;
+                    float distToPath = distanceToSegment(b.x, b.y, p.prevX, p.prevY, p.x, p.y);
+
+                    if (distToPath <= blockRadius) {
                         if (b.health <= wallDamage) {
-                            b.kill(); // 血量不足1000，摧毁，粒子继续飞
+                            b.kill();
                         } else {
-                            b.damage(wallDamage); // 扣1000血
-                            p.dead = true; // 粒子消失
-                            break; // 粒子死了，跳出建筑检测
+                            b.damage(wallDamage);
+                            p.dead = true;
+                            break;
                         }
                     }
                 }
 
-                // 超出最大距离消失
                 if (p.distTraveled > particleMaxDistance) {
                     p.dead = true;
                 }
             }
 
-            // 清理死亡粒子
             particles.removeAll(p -> p.dead);
+        }
+
+        private static float distanceToSegment(float px, float py, float x1, float y1, float x2, float y2) {
+            float dx = x2 - x1, dy = y2 - y1;
+            float len2 = dx * dx + dy * dy;
+            if (len2 < 0.0001f) return Mathf.dst(px, py, x1, y1);
+            float t = ((px - x1) * dx + (py - y1) * dy) / len2;
+            t = Mathf.clamp(t, 0f, 1f);
+            return Mathf.dst(px, py, x1 + t * dx, y1 + t * dy);
         }
 
         @Override
@@ -400,16 +413,14 @@ public class PulsarModMain extends Mod {
             Draw.reset();
             float x = unit.x, y = unit.y, time = Time.time;
 
-            // 绘制所有粒子
             for (ShockwaveParticle p : particles) {
                 Draw.z(130f);
                 Draw.color(ringColor);
-                Fill.circle(p.x, p.y, 3f + Mathf.sin(time * 5f) * 1.5f);
+                Fill.circle(p.x, p.y, 2.5f + Mathf.sin(time * 5f + p.x) * 1f);
                 Draw.color(Color.white, 0.8f);
-                Fill.circle(p.x, p.y, 1.5f);
+                Fill.circle(p.x, p.y, 1.2f);
             }
 
-            // 绘制本体核心
             Draw.z(110f);
             Draw.color(ringColor);
             Fill.circle(x, y, baseRadius * 1.5f);
