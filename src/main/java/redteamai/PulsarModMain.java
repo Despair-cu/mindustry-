@@ -11,7 +11,7 @@ import arc.math.Mathf;
 import arc.struct.Seq;
 import arc.util.Log;
 import arc.util.Time;
-import mindustry.game.EventType.RenderEvent;
+import mindustry.game.EventType.Trigger;
 import mindustry.gen.Building;
 import mindustry.gen.Groups;
 import mindustry.gen.Unit;
@@ -298,7 +298,7 @@ public class PulsarModMain extends Mod {
     }
 
     // ============================================================
-    // 不稳定引力波（最终版：建筑伤1000，单位秒杀）
+    // 不稳定引力波（最终版：建筑伤1000，单位秒杀，兼容渲染）
     // ============================================================
     public static class ShockwaveUnitType extends UnitType {
         private final Color ringColor = Color.valueOf("00e5ff");
@@ -307,10 +307,12 @@ public class PulsarModMain extends Mod {
         private final float shockwaveSpeed = 400f;
         private final float shockwaveThickness = 20f;
         private final float shockwaveMaxRadius = 1800f;
-        private final float wallDamage = 1000f; // 建筑伤害 1000
+        private final float wallDamage = 1000f;
 
         private float shockwaveTimer = 0f;
         private final Seq<Shockwave> activeWaves = new Seq<>();
+
+        // 静态全局波列表 + 渲染器（用 Trigger.draw，v159 稳定存在）
         private static final Seq<Shockwave> allWavesGlobal = new Seq<>();
         private static boolean rendererRegistered = false;
 
@@ -337,7 +339,8 @@ public class PulsarModMain extends Mod {
 
             if (!rendererRegistered) {
                 rendererRegistered = true;
-                Events.on(RenderEvent.class, e -> {
+                // 用 Trigger.draw 代替 RenderEvent（每帧渲染时触发，兼容所有版本）
+                Events.on(Trigger.draw, e -> {
                     Draw.reset();
                     float time = Time.time;
                     for (Shockwave wave : allWavesGlobal) {
@@ -402,13 +405,13 @@ public class PulsarModMain extends Mod {
                 float prevRadius = wave.radius;
                 wave.radius += shockwaveSpeed * (Time.delta / 60f);
 
-                // 单位：直接秒杀
+                // 单位：秒杀
                 wave.hitUnits.removeAll(u -> {
                     if (u == null || u.dead) return true;
                     float dst = Mathf.dst(unit.x, unit.y, u.x, u.y);
                     if (dst >= prevRadius && dst <= wave.radius + shockwaveThickness) {
                         if (!isBlockedByBuilding(unit.x, unit.y, u.x, u.y, wave)) {
-                            u.kill(); // 秒杀
+                            u.kill();
                         }
                         return true;
                     }
@@ -464,6 +467,7 @@ public class PulsarModMain extends Mod {
 
         @Override
         public void draw(Unit unit) {
+            // 只画本体核心
             Draw.reset();
             float x = unit.x, y = unit.y, time = Time.time;
             Draw.z(110f);
