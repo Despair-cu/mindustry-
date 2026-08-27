@@ -263,7 +263,7 @@ public class PulsarModMain extends Mod {
                     float flicker = (Mathf.sin(dist * 0.15f - time * 0.5f) + 1f) / 2f;
                     float alpha = (1f - t * 0.75f) * (0.6f + flicker * 0.4f);
                     float size = (1.5f - t * 1.0f) * Mathf.rand.random(0.8f, 1.5f);
-                    size = Mathf.max(size, 0.25f);
+                    size = Math.max(size, 0.25f);
                     Draw.color(c, alpha); Fill.circle(px, py, size);
                 }
             }
@@ -283,7 +283,7 @@ public class PulsarModMain extends Mod {
                 float flicker = (Mathf.sin(time * 8f + i * 0.9f) + 1f) / 2f;
                 float alpha = (0.7f + flicker * 0.3f) * (1f - t * 0.6f);
                 float size = (2.0f - t * 1.3f) + Mathf.sin(time * 6f + i) * 0.3f;
-                size = Mathf.max(size, 0.3f);
+                size = Math.max(size, 0.3f);
                 Draw.color(c, alpha); Fill.circle(px, py, size);
             }
             Mathf.rand.setSeed(0);
@@ -416,14 +416,14 @@ public class PulsarModMain extends Mod {
                 // 盾墙
                 if (b instanceof ShieldWall.ShieldWallBuild) {
                     ShieldWall.ShieldWallBuild shield = (ShieldWall.ShieldWallBuild) b;
-                    if (b.powered() && shield.shield > 0) {
+                    if (b.power != null && b.power.status > 0f && shield.shield > 0) {
                         shieldR = shield.shieldRadius;
                         isShieldBlock = true;
                     }
                 }
                 // 大型护盾投影 (BaseShield)
                 else if (b.block instanceof BaseShield) {
-                    if (b.powered()) {
+                    if (b.power != null && b.power.status > 0f) {
                         shieldR = ((BaseShield) b.block).radius;
                         isShieldBlock = true;
                     }
