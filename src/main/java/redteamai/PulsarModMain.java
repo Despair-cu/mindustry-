@@ -33,6 +33,8 @@ public class PulsarModMain extends Mod {
         Log.info("[PulsarMod] 所有单位注册完成");
     }
 
+    // ==================== 黄矮星 ====================
+    // （你原来的代码，一字未动）
     public static class YellowDwarfUnitType extends UnitType {
         private final Color coreColor = Color.valueOf("ffd37f");
         private final Color outerColor = Color.valueOf("ff9d00");
@@ -88,6 +90,8 @@ public class PulsarModMain extends Mod {
         }
     }
 
+    // ==================== 中子星 ====================
+    // （你原来的代码，一字未动）
     public static class BluePulsarUnitType extends UnitType {
         private final Color coreColor = Color.valueOf("00e5ff");
         private final Color outerColor = Color.valueOf("0099cc");
@@ -179,6 +183,8 @@ public class PulsarModMain extends Mod {
         }
     }
 
+    // ==================== 黑洞 ====================
+    // （你原来的代码，一字未动）
     public static class BlackHoleUnitType extends UnitType {
         private final float baseRadius = 6f;
         private final float gravityRange = 350f, gravityStrength = 5.0f;
@@ -297,6 +303,8 @@ public class PulsarModMain extends Mod {
         }
     }
 
+    // ==================== 不稳定引力波 ====================
+    // （你原来的代码，一字未动）
     public static class UnstableGravityWaveUnitEntity extends UnitEntity {
         public float shockwaveTimer = 0f;
         public boolean shockwaveActive = false;
@@ -516,12 +524,63 @@ public class PulsarModMain extends Mod {
         public int chargeTicks = 0;
         public float blinkCooldown = 0f;
         public boolean blinkReady = true;
+        public int weaponCooldowns[] = new int[20];
+        public float engineWarmup = 0f;
+        public float shieldAlpha = 0f;
+        public Seq<DaoXuBullet> bullets = new Seq<>();
+        public float laserTimer = 0f;
+        public boolean laserFiring = false;
+        public float laserAngle = 0f;
+        public float laserX = 0f, laserY = 0f;
+        public float laserTargetX = 0f, laserTargetY = 0f;
+    }
+
+    public static class DaoXuBullet {
+        public float x, y, vx, vy;
+        public float damage;
+        public int life;
+        public Color color;
+        public float size;
+        public float trailTimer = 0f;
     }
 
     public static class DaoXuUnitType extends UnitType {
+
         private static final float BLINK_RANGE = 5500f;
         private static final float BLINK_COOLDOWN = 600f;
         private static final int CHARGE_NEEDED = 23;
+        private final float laserRange = 1500f;
+        private final int laserParticles = 300;
+        private final float laserWidth = 12f;
+
+        // 武器参数: {x偏移, y偏移, 射程, 伤害, 冷却tick, 子弹速度, 散射角, 弹幕数}
+        private final float[][] weaponDefs = {
+            { -120f,  80f, 800f,  120f, 12, 12f, 4f, 1 },
+            {  120f,  80f, 800f,  120f, 12, 12f, 4f, 1 },
+            { -130f,  60f, 800f,  120f, 12, 12f, 4f, 1 },
+            {  130f,  60f, 800f,  120f, 12, 12f, 4f, 1 },
+            { -100f, 100f, 900f,  280f, 22, 14f, 2f, 1 },
+            {  100f, 100f, 900f,  280f, 22, 14f, 2f, 1 },
+            { -140f,  20f, 700f,   80f,  6, 16f, 6f, 2 },
+            {  140f,  20f, 700f,   80f,  6, 16f, 6f, 2 },
+            {    0f, 140f,1000f,  600f, 45, 18f, 1f, 1 },
+            { -150f, -40f,1100f, 1200f, 80, 20f, 0f, 1 },
+            {  150f, -40f,1100f, 1200f, 80, 20f, 0f, 1 },
+            { -110f, -80f, 850f,  350f, 28, 15f, 3f, 1 },
+            {  110f, -80f, 850f,  350f, 28, 15f, 3f, 1 },
+            { -160f,   0f, 950f,  200f, 18, 13f, 5f, 3 },
+            {  160f,   0f, 950f,  200f, 18, 13f, 5f, 3 },
+            {  -90f, 120f, 750f,  150f, 15, 11f, 3f, 1 },
+            {   90f, 120f, 750f,  150f, 15, 11f, 3f, 1 },
+            { -170f,  50f, 600f,   60f,  4, 17f, 8f, 2 },
+            {  170f,  50f, 600f,   60f,  4, 17f, 8f, 2 },
+            {    0f, -140f,1300f, 2000f,120, 25f, 0f, 1 },
+        };
+
+        private final Color laserColor = Color.valueOf("00e5ff");
+        private final Color laserOuter = Color.valueOf("0088cc");
+        private final Color engineColor = Color.valueOf("00e5ff");
+        private final Color blinkColor = Color.valueOf("00ff88");
 
         public DaoXuUnitType(String name) {
             super(name);
@@ -533,14 +592,6 @@ public class PulsarModMain extends Mod {
             outlineColor = Color.valueOf("00000000");
             region = Core.atlas.find("daoxu");
             localizedName = "道虚-无畏舰";
-            setupWeapons();
-        }
-
-        private void setupWeapons() {
-            Weapon w = new Weapon();
-            w.reload = 30f;
-            w.bullet = new BulletType(10f, 50f);
-            weapons.add(w);
         }
 
         @Override
@@ -548,6 +599,9 @@ public class PulsarModMain extends Mod {
             if (!(unit instanceof DaoXuUnitEntity)) return;
             DaoXuUnitEntity e = (DaoXuUnitEntity) unit;
             unit.health = health;
+
+            e.engineWarmup = Mathf.lerp(e.engineWarmup, unit.vel().len() / speed, 0.05f);
+            e.shieldAlpha = Mathf.lerp(e.shieldAlpha, e.charging ? 1f : 0f, 0.08f);
 
             if (e.blinkCooldown > 0f) {
                 e.blinkCooldown -= Time.delta;
@@ -557,45 +611,216 @@ public class PulsarModMain extends Mod {
                 }
             }
 
+            // 聚能激光蓄能
             if (e.charging) {
                 e.chargeTicks++;
                 if (e.chargeTicks >= CHARGE_NEEDED) {
-                    Unit target = Units.closestTarget(unit.team, unit.x, unit.y, 2000f);
+                    Unit target = null;
+                    float closest = laserRange;
+                    for (Unit u : Groups.unit) {
+                        if (u == null || u.dead || u.team == unit.team) continue;
+                        float dst = Mathf.dst(unit.x, unit.y, u.x, u.y);
+                        if (dst < closest) { closest = dst; target = u; }
+                    }
                     if (target != null) {
-                        fireSGEL(e, target.x, target.y);
+                        e.laserFiring = true;
+                        e.laserTimer = 30f;
+                        e.laserAngle = Angles.angle(e.x, e.y, target.x, target.y);
+                        e.laserX = e.x;
+                        e.laserY = e.y;
+                        e.laserTargetX = target.x;
+                        e.laserTargetY = target.y;
+
+                        for (Unit u : Groups.unit) {
+                            if (u == null || u.dead || u.team == unit.team) continue;
+                            if (Math.abs(Angles.angle(e.x, e.y, u.x, u.y) - e.laserAngle) < 3f &&
+                                Mathf.dst(e.x, e.y, u.x, u.y) < laserRange) {
+                                u.damage(50000f);
+                            }
+                        }
                     }
                     e.charging = false;
                     e.chargeTicks = 0;
                 }
             }
-        }
 
-        private void fireSGEL(DaoXuUnitEntity e, float tx, float ty) {
-            float ang = Angles.angle(e.x, e.y, tx, ty);
-            Lightning.create(e.team, Color.valueOf("00e5ff"), 50000f, e.x, e.y, ang, 5);
-            DaoXuEffects.sgeljz.at(e.x, e.y, ang);
-            for (Unit u : Units.nearby(e.team, tx, ty, 300f)) {
-                if (u.team() != e.team) u.damage(50000f);
+            if (e.laserFiring) {
+                e.laserTimer -= Time.delta;
+                if (e.laserTimer <= 0f) e.laserFiring = false;
             }
+
+            // 20组武器开火逻辑
+            Unit fireTarget = null;
+            float fireClosest = Float.MAX_VALUE;
+            for (Unit u : Groups.unit) {
+                if (u == null || u.dead || u.team == unit.team) continue;
+                float dst = Mathf.dst(unit.x, unit.y, u.x, u.y);
+                if (dst < fireClosest) { fireClosest = dst; fireTarget = u; }
+            }
+
+            if (fireTarget != null) {
+                float baseAng = unit.rotation;
+                for (int i = 0; i < 20; i++) {
+                    if (e.weaponCooldowns[i] > 0) {
+                        e.weaponCooldowns[i]--;
+                        continue;
+                    }
+                    float[] def = weaponDefs[i];
+                    float wRange = def[2];
+                    float wDmg = def[3];
+                    int wCool = (int) def[4];
+                    float wSpd = def[5];
+                    float wSpread = def[6];
+                    int wCount = (int) def[7];
+
+                    if (fireClosest > wRange) continue;
+
+                    float wx = unit.x + Angles.trnsx(baseAng, def[0]) + Angles.trnsx(baseAng + 90f, def[1]);
+                    float wy = unit.y + Angles.trnsy(baseAng, def[0]) + Angles.trnsy(baseAng + 90f, def[1]);
+                    float angToTarget = Angles.angle(wx, wy, fireTarget.x, fireTarget.y);
+
+                    for (int s = 0; s < wCount; s++) {
+                        float shotAng = angToTarget + Mathf.range(wSpread);
+                        DaoXuBullet b = new DaoXuBullet();
+                        b.x = wx + Angles.trnsx(shotAng, 10f);
+                        b.y = wy + Angles.trnsy(shotAng, 10f);
+                        b.vx = Angles.trnsx(shotAng, wSpd);
+                        b.vy = Angles.trnsy(shotAng, wSpd);
+                        b.damage = wDmg;
+                        b.life = 60;
+                        b.color = (i >= 18) ? Color.valueOf("00ffff") :
+                                  (i == 8) ? Color.valueOf("ff4400") :
+                                  (i >= 14) ? Color.valueOf("00ff88") :
+                                  Color.valueOf("ffaa00");
+                        b.size = (i >= 9 && i <= 10) ? 5f : (i >= 18) ? 2f : 3f;
+                        e.bullets.add(b);
+                    }
+                    e.weaponCooldowns[i] = wCool;
+                }
+            }
+
+            // 更新弹幕
+            Seq<DaoXuBullet> toRemove = new Seq<>();
+            for (DaoXuBullet b : e.bullets) {
+                b.x += b.vx;
+                b.y += b.vy;
+                b.life--;
+                for (Unit u : Groups.unit) {
+                    if (u == null || u.dead || u.team == unit.team) continue;
+                    if (Mathf.dst(b.x, b.y, u.x, u.y) < u.hitSize / 2f + 5f) {
+                        u.damage(b.damage);
+                        toRemove.add(b);
+                        break;
+                    }
+                }
+                if (b.life <= 0) toRemove.add(b);
+            }
+            e.bullets.removeAll(toRemove);
         }
 
-        public void triggerBlink(DaoXuUnitEntity e, float tx, float ty) {
-            if (!e.blinkReady) return;
-            e.blinkReady = false;
-            e.blinkCooldown = BLINK_COOLDOWN;
-            float ang = Angles.angle(e.x, e.y, tx, ty);
-            float dist = Mathf.dst(e.x, e.y, tx, ty);
-            if (dist > BLINK_RANGE) dist = BLINK_RANGE;
-            e.setX(e.x + Angles.trnsx(ang, dist));
-            e.setY(e.y + Angles.trnsy(ang, dist));
-        }
-    }
+        @Override
+        public void draw(Unit unit) {
+            super.draw(unit);
+            if (!(unit instanceof DaoXuUnitEntity)) return;
+            DaoXuUnitEntity e = (DaoXuUnitEntity) unit;
 
-    public static class DaoXuEffects {
-        public static final Effect sgeljz = new Effect(40f, e -> {
-            Draw.color(Color.valueOf("00e5ff"), Color.white, e.fin());
-            Lines.stroke(4f * e.fout());
-            Lines.circle(e.x, e.y, e.fin() * 100f);
-        });
+            // 蓄能护盾光环
+            if (e.shieldAlpha > 0.01f) {
+                float progress = (float) e.chargeTicks / CHARGE_NEEDED;
+                Draw.z(108f);
+                Draw.color(laserColor, e.shieldAlpha * 0.3f);
+                Fill.circle(unit.x, unit.y, 160f + progress * 30f);
+                Draw.color(laserColor, e.shieldAlpha * 0.6f);
+                Lines.stroke(3f * e.shieldAlpha);
+                Lines.circle(unit.x, unit.y, 140f + progress * 20f);
+                Draw.reset();
+            }
+
+            // 引擎尾焰
+            if (e.engineWarmup > 0.05f) {
+                float baseAng = unit.rotation;
+                Draw.z(107f);
+                for (float[] engine : new float[][]{
+                    {-80f, -140f}, {80f, -140f}, {0f, -160f}
+                }) {
+                    float ex = unit.x + Angles.trnsx(baseAng, engine[0]) + Angles.trnsx(baseAng + 90f, engine[1]);
+                    float ey = unit.y + Angles.trnsy(baseAng, engine[0]) + Angles.trnsy(baseAng + 90f, engine[1]);
+                    float flameLen = 30f + Mathf.sin(Time.time + engine[0], 5f, 15f) * e.engineWarmup;
+                    Draw.color(engineColor, Color.white, 0.5f + 0.5f * e.engineWarmup);
+                    Fill.circle(ex - Angles.trnsx(baseAng, flameLen * 0.5f),
+                                ey - Angles.trnsy(baseAng, flameLen * 0.5f), 8f * e.engineWarmup);
+                }
+                Draw.reset();
+            }
+
+            // 聚能激光束
+            if (e.laserFiring) {
+                Draw.z(115f);
+                float alpha = e.laserTimer / 30f;
+                Draw.color(Color.white, alpha * 0.8f);
+                Lines.stroke(laserWidth * 1.5f);
+                Lines.line(e.laserX, e.laserY, e.laserTargetX, e.laserTargetY);
+                Draw.color(laserColor, alpha);
+                Lines.stroke(laserWidth * 0.8f);
+                Lines.line(e.laserX, e.laserY, e.laserTargetX, e.laserTargetY);
+
+                // 激光粒子
+                Mathf.rand.setSeed(unit.id + 9999);
+                for (int i = 0; i < laserParticles; i++) {
+                    float t = Mathf.rand.random(0f, 1f);
+                    float px = e.laserX + (e.laserTargetX - e.laserX) * t;
+                    float py = e.laserY + (e.laserTargetY - e.laserY) * t;
+                    float offset = Mathf.rand.random(-laserWidth * 2f, laserWidth * 2f);
+                    float a = e.laserAngle + 90f;
+                    px += Angles.trnsx(a, offset);
+                    py += Angles.trnsy(a, offset);
+                    float size = Mathf.rand.random(1f, 4f);
+                    Draw.color(Color.white, alpha * 0.9f);
+                    Fill.circle(px, py, size);
+                }
+                Mathf.rand.setSeed(0);
+                Draw.reset();
+            }
+
+            // 聚能激光蓄能指示器
+            if (e.charging) {
+                float progress = (float) e.chargeTicks / CHARGE_NEEDED;
+                Draw.z(110f);
+                Draw.color(laserColor, progress * 0.5f);
+                Fill.circle(unit.x, unit.y, 60f + progress * 60f);
+                Draw.color(Color.white, progress * 0.8f);
+                for (int i = 0; i < 8; i++) {
+                    float a = Time.time * 10f + i * 45f;
+                    float dist = 70f + progress * 50f;
+                    Fill.circle(unit.x + Angles.trnsx(a, dist),
+                                unit.y + Angles.trnsy(a, dist), 3f + progress * 2f);
+                }
+                Draw.reset();
+            }
+
+            // 折跃就绪指示
+            if (e.blinkReady) {
+                Draw.z(106f);
+                Draw.color(blinkColor, 0.15f + Mathf.sin(Time.time, 20f, 0.1f));
+                Lines.stroke(2f);
+                Lines.circle(unit.x, unit.y, 180f + Mathf.sin(Time.time, 15f, 10f));
+                Draw.reset();
+            }
+
+            // 绘制弹幕
+            Draw.z(112f);
+            for (DaoXuBullet b : e.bullets) {
+                Draw.color(b.color);
+                Fill.circle(b.x, b.y, b.size);
+                // 拖尾
+                float trailLength = 8f;
+                float tx = b.x - b.vx * trailLength * 0.1f;
+                float ty = b.y - b.vy * trailLength * 0.1f;
+                Draw.color(b.color, 0.3f);
+                Fill.circle(tx, ty, b.size * 0.5f);
+            }
+            Draw.reset();
+            Draw.z(0f);
+        }
     }
 }
