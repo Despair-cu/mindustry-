@@ -526,12 +526,11 @@ public class PulsarModMain extends Mod {
         public boolean blinkReady = true;
         public int weaponCooldowns[] = new int[20];
         public float engineWarmup = 0f;
-        public float shieldAlpha = 0f;
+        public float autoChargeTimer = 0f;
         public Seq<DaoXuBullet> bullets = new Seq<>();
-        public float laserTimer = 0f;
         public boolean laserFiring = false;
+        public float laserTimer = 0f;
         public float laserAngle = 0f;
-        public float laserX = 0f, laserY = 0f;
         public float laserTargetX = 0f, laserTargetY = 0f;
     }
 
@@ -539,9 +538,7 @@ public class PulsarModMain extends Mod {
         public float x, y, vx, vy;
         public float damage;
         public int life;
-        public Color color;
         public float size;
-        public float trailTimer = 0f;
     }
 
     public static class DaoXuUnitType extends UnitType {
@@ -549,16 +546,14 @@ public class PulsarModMain extends Mod {
         private static final float BLINK_RANGE = 5500f;
         private static final float BLINK_COOLDOWN = 600f;
         private static final int CHARGE_NEEDED = 23;
+        private static final float AUTO_CHARGE_INTERVAL = 60f * 15f; // 15秒自动蓄能一次
         private final float laserRange = 1500f;
-        private final int laserParticles = 300;
-        private final float laserWidth = 12f;
 
-        // 武器参数: {x偏移, y偏移, 射程, 伤害, 冷却tick, 子弹速度, 散射角, 弹幕数}
         private final float[][] weaponDefs = {
             { -120f,  80f, 800f,  120f, 12, 12f, 4f, 1 },
             {  120f,  80f, 800f,  120f, 12, 12f, 4f, 1 },
             { -130f,  60f, 800f,  120f, 12, 12f, 4f, 1 },
-            {  130f,  60f, 800f,  120f, 12, 12f, 4f, 1 },
+            {  130f,  60f, 800f,  120f, 12, 12f, 1f, 1 },
             { -100f, 100f, 900f,  280f, 22, 14f, 2f, 1 },
             {  100f, 100f, 900f,  280f, 22, 14f, 2f, 1 },
             { -140f,  20f, 700f,   80f,  6, 16f, 6f, 2 },
@@ -577,10 +572,8 @@ public class PulsarModMain extends Mod {
             {    0f, -140f,1300f, 2000f,120, 25f, 0f, 1 },
         };
 
-        private final Color laserColor = Color.valueOf("00e5ff");
-        private final Color laserOuter = Color.valueOf("0088cc");
-        private final Color engineColor = Color.valueOf("00e5ff");
-        private final Color blinkColor = Color.valueOf("00ff88");
+        // 子弹贴图，走 atlas
+        private final TextureRegion bulletRegion = Core.atlas.find("daoxu-bullet");
 
         public DaoXuUnitType(String name) {
             super(name);
@@ -590,7 +583,9 @@ public class PulsarModMain extends Mod {
             constructor = DaoXuUnitEntity::create;
             weapons = new Seq<>();
             outlineColor = Color.valueOf("00000000");
-            region = Core.atlas.find("daoxu");
+            region = Core.atlas.find("daoxu");       // 船体贴图
+            outlineRegion = Core.atlas.find("daoxu-outline");
+            drawBody = true;                          // ← 关键：必须 true 才会画 region
             localizedName = "道虚-无畏舰";
         }
 
@@ -601,17 +596,20 @@ public class PulsarModMain extends Mod {
             unit.health = health;
 
             e.engineWarmup = Mathf.lerp(e.engineWarmup, unit.vel().len() / speed, 0.05f);
-            e.shieldAlpha = Mathf.lerp(e.shieldAlpha, e.charging ? 1f : 0f, 0.08f);
 
             if (e.blinkCooldown > 0f) {
                 e.blinkCooldown -= Time.delta;
-                if (e.blinkCooldown <= 0f) {
-                    e.blinkCooldown = 0f;
-                    e.blinkReady = true;
-                }
+                if (e.blinkCooldown <= 0f) { e.blinkCooldown = 0f; e.blinkReady = true; }
             }
 
-            // 聚能激光蓄能
+            // ===== 自动蓄能：每 15 秒触发一次聚能激光 =====
+            e.autoChargeTimer += Time.delta;
+            if (!e.charging && !e.laserFiring && e.autoChargeTimer >= AUTO_CHARGE_INTERVAL) {
+                e.charging = true;
+                e.chargeTicks = 0;
+                e.autoChargeTimer = 0f;
+            }
+
             if (e.charging) {
                 e.chargeTicks++;
                 if (e.chargeTicks >= CHARGE_NEEDED) {
@@ -625,16 +623,13 @@ public class PulsarModMain extends Mod {
                     if (target != null) {
                         e.laserFiring = true;
                         e.laserTimer = 30f;
-                        e.laserAngle = Angles.angle(e.x, e.y, target.x, target.y);
-                        e.laserX = e.x;
-                        e.laserY = e.y;
+                        e.laserAngle = Angles.angle(unit.x, unit.y, target.x, target.y);
                         e.laserTargetX = target.x;
                         e.laserTargetY = target.y;
-
                         for (Unit u : Groups.unit) {
                             if (u == null || u.dead || u.team == unit.team) continue;
-                            if (Math.abs(Angles.angle(e.x, e.y, u.x, u.y) - e.laserAngle) < 3f &&
-                                Mathf.dst(e.x, e.y, u.x, u.y) < laserRange) {
+                            if (Math.abs(Angles.angle(unit.x, unit.y, u.x, u.y) - e.laserAngle) < 4f &&
+                                Mathf.dst(unit.x, unit.y, u.x, u.y) < laserRange) {
                                 u.damage(50000f);
                             }
                         }
@@ -649,7 +644,7 @@ public class PulsarModMain extends Mod {
                 if (e.laserTimer <= 0f) e.laserFiring = false;
             }
 
-            // 20组武器开火逻辑
+            // ===== 20 组武器自动开火（有敌人就打）=====
             Unit fireTarget = null;
             float fireClosest = Float.MAX_VALUE;
             for (Unit u : Groups.unit) {
@@ -661,18 +656,12 @@ public class PulsarModMain extends Mod {
             if (fireTarget != null) {
                 float baseAng = unit.rotation;
                 for (int i = 0; i < 20; i++) {
-                    if (e.weaponCooldowns[i] > 0) {
-                        e.weaponCooldowns[i]--;
-                        continue;
-                    }
+                    if (e.weaponCooldowns[i] > 0) { e.weaponCooldowns[i]--; continue; }
                     float[] def = weaponDefs[i];
-                    float wRange = def[2];
-                    float wDmg = def[3];
+                    float wRange = def[2], wDmg = def[3];
                     int wCool = (int) def[4];
-                    float wSpd = def[5];
-                    float wSpread = def[6];
+                    float wSpd = def[5], wSpread = def[6];
                     int wCount = (int) def[7];
-
                     if (fireClosest > wRange) continue;
 
                     float wx = unit.x + Angles.trnsx(baseAng, def[0]) + Angles.trnsx(baseAng + 90f, def[1]);
@@ -688,18 +677,14 @@ public class PulsarModMain extends Mod {
                         b.vy = Angles.trnsy(shotAng, wSpd);
                         b.damage = wDmg;
                         b.life = 60;
-                        b.color = (i >= 18) ? Color.valueOf("00ffff") :
-                                  (i == 8) ? Color.valueOf("ff4400") :
-                                  (i >= 14) ? Color.valueOf("00ff88") :
-                                  Color.valueOf("ffaa00");
-                        b.size = (i >= 9 && i <= 10) ? 5f : (i >= 18) ? 2f : 3f;
+                        b.size = (i >= 9 && i <= 10) ? 8f : 4f;
                         e.bullets.add(b);
                     }
                     e.weaponCooldowns[i] = wCool;
                 }
             }
 
-            // 更新弹幕
+            // ===== 更新弹幕（贴图绘制由 draw() 负责，这里只做逻辑）=====
             Seq<DaoXuBullet> toRemove = new Seq<>();
             for (DaoXuBullet b : e.bullets) {
                 b.x += b.vx;
@@ -707,7 +692,7 @@ public class PulsarModMain extends Mod {
                 b.life--;
                 for (Unit u : Groups.unit) {
                     if (u == null || u.dead || u.team == unit.team) continue;
-                    if (Mathf.dst(b.x, b.y, u.x, u.y) < u.hitSize / 2f + 5f) {
+                    if (Mathf.dst(b.x, b.y, u.x, u.y) < u.hitSize / 2f + 6f) {
                         u.damage(b.damage);
                         toRemove.add(b);
                         break;
@@ -720,36 +705,17 @@ public class PulsarModMain extends Mod {
 
         @Override
         public void draw(Unit unit) {
+            // 先画船体贴图（drawBody=true 时 super.draw 会画 region）
             super.draw(unit);
             if (!(unit instanceof DaoXuUnitEntity)) return;
             DaoXuUnitEntity e = (DaoXuUnitEntity) unit;
 
-            // 蓄能护盾光环
-            if (e.shieldAlpha > 0.01f) {
+            // 蓄能光环
+            if (e.charging) {
                 float progress = (float) e.chargeTicks / CHARGE_NEEDED;
                 Draw.z(108f);
-                Draw.color(laserColor, e.shieldAlpha * 0.3f);
+                Draw.color(Color.valueOf("00e5ff"), progress * 0.4f);
                 Fill.circle(unit.x, unit.y, 160f + progress * 30f);
-                Draw.color(laserColor, e.shieldAlpha * 0.6f);
-                Lines.stroke(3f * e.shieldAlpha);
-                Lines.circle(unit.x, unit.y, 140f + progress * 20f);
-                Draw.reset();
-            }
-
-            // 引擎尾焰
-            if (e.engineWarmup > 0.05f) {
-                float baseAng = unit.rotation;
-                Draw.z(107f);
-                for (float[] engine : new float[][]{
-                    {-80f, -140f}, {80f, -140f}, {0f, -160f}
-                }) {
-                    float ex = unit.x + Angles.trnsx(baseAng, engine[0]) + Angles.trnsx(baseAng + 90f, engine[1]);
-                    float ey = unit.y + Angles.trnsy(baseAng, engine[0]) + Angles.trnsy(baseAng + 90f, engine[1]);
-                    float flameLen = 30f + Mathf.sin(Time.time + engine[0], 5f, 15f) * e.engineWarmup;
-                    Draw.color(engineColor, Color.white, 0.5f + 0.5f * e.engineWarmup);
-                    Fill.circle(ex - Angles.trnsx(baseAng, flameLen * 0.5f),
-                                ey - Angles.trnsy(baseAng, flameLen * 0.5f), 8f * e.engineWarmup);
-                }
                 Draw.reset();
             }
 
@@ -757,43 +723,17 @@ public class PulsarModMain extends Mod {
             if (e.laserFiring) {
                 Draw.z(115f);
                 float alpha = e.laserTimer / 30f;
-                Draw.color(Color.white, alpha * 0.8f);
-                Lines.stroke(laserWidth * 1.5f);
-                Lines.line(e.laserX, e.laserY, e.laserTargetX, e.laserTargetY);
-                Draw.color(laserColor, alpha);
-                Lines.stroke(laserWidth * 0.8f);
-                Lines.line(e.laserX, e.laserY, e.laserTargetX, e.laserTargetY);
-
-                // 激光粒子
-                Mathf.rand.setSeed(unit.id + 9999);
-                for (int i = 0; i < laserParticles; i++) {
-                    float t = Mathf.rand.random(0f, 1f);
-                    float px = e.laserX + (e.laserTargetX - e.laserX) * t;
-                    float py = e.laserY + (e.laserTargetY - e.laserY) * t;
-                    float offset = Mathf.rand.random(-laserWidth * 2f, laserWidth * 2f);
-                    float a = e.laserAngle + 90f;
-                    px += Angles.trnsx(a, offset);
-                    py += Angles.trnsy(a, offset);
-                    float size = Mathf.rand.random(1f, 4f);
-                    Draw.color(Color.white, alpha * 0.9f);
-                    Fill.circle(px, py, size);
-                }
-                Mathf.rand.setSeed(0);
+                Draw.color(Color.valueOf("00e5ff"), alpha);
+                Lines.stroke(10f);
+                Lines.line(unit.x, unit.y, e.laserTargetX, e.laserTargetY);
                 Draw.reset();
             }
 
-            // 聚能激光蓄能指示器
-            if (e.charging) {
-                float progress = (float) e.chargeTicks / CHARGE_NEEDED;
-                Draw.z(110f);
-                Draw.color(laserColor, progress * 0.5f);
-                Fill.circle(unit.x, unit.y, 60f + progress * 60f);
-                Draw.color(Color.white, progress * 0.8f);
-                for (int i = 0; i < 8; i++) {
-                    float a = Time.time * 10f + i * 45f;
-                    float dist = 70f + progress * 50f;
-                    Fill.circle(unit.x + Angles.trnsx(a, dist),
-                                unit.y + Angles.trnsy(a, dist), 3f + progress * 2f);
+            // 弹幕：用贴图绘制
+            if (bulletRegion != null && !bulletRegion.equals(Core.atlas.find("clear"))) {
+                Draw.z(112f);
+                for (DaoXuBullet b : e.bullets) {
+                    Draw.rect(bulletRegion, b.x, b.y, b.size, b.size, Angles.angle(b.vx, b.vy));
                 }
                 Draw.reset();
             }
@@ -801,26 +741,11 @@ public class PulsarModMain extends Mod {
             // 折跃就绪指示
             if (e.blinkReady) {
                 Draw.z(106f);
-                Draw.color(blinkColor, 0.15f + Mathf.sin(Time.time, 20f, 0.1f));
+                Draw.color(Color.valueOf("00ff88"), 0.15f + Mathf.sin(Time.time, 20f, 0.1f));
                 Lines.stroke(2f);
                 Lines.circle(unit.x, unit.y, 180f + Mathf.sin(Time.time, 15f, 10f));
                 Draw.reset();
             }
-
-            // 绘制弹幕
-            Draw.z(112f);
-            for (DaoXuBullet b : e.bullets) {
-                Draw.color(b.color);
-                Fill.circle(b.x, b.y, b.size);
-                // 拖尾
-                float trailLength = 8f;
-                float tx = b.x - b.vx * trailLength * 0.1f;
-                float ty = b.y - b.vy * trailLength * 0.1f;
-                Draw.color(b.color, 0.3f);
-                Fill.circle(tx, ty, b.size * 0.5f);
-            }
-            Draw.reset();
             Draw.z(0f);
         }
     }
-}
