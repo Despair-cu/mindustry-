@@ -11,7 +11,7 @@ import arc.math.Mathf;
 import arc.struct.Seq;
 import arc.util.Log;
 import arc.util.Time;
-import mindustry.game.EventType.Trigger;
+import mindustry.game.EventType.RenderEvent;
 import mindustry.gen.Building;
 import mindustry.gen.Groups;
 import mindustry.gen.Unit;
@@ -298,7 +298,7 @@ public class PulsarModMain extends Mod {
     }
 
     // ============================================================
-    // 不稳定引力波（最终版：建筑伤1000，单位秒杀，兼容渲染）
+    // 不稳定引力波（v8 159.7 兼容版）
     // ============================================================
     public static class ShockwaveUnitType extends UnitType {
         private final Color ringColor = Color.valueOf("00e5ff");
@@ -312,7 +312,7 @@ public class PulsarModMain extends Mod {
         private float shockwaveTimer = 0f;
         private final Seq<Shockwave> activeWaves = new Seq<>();
 
-        // 静态全局波列表 + 渲染器（用 Trigger.draw，v159 稳定存在）
+        // 静态全局波列表 + 渲染器（v8：用 RenderEvent.class）
         private static final Seq<Shockwave> allWavesGlobal = new Seq<>();
         private static boolean rendererRegistered = false;
 
@@ -339,8 +339,8 @@ public class PulsarModMain extends Mod {
 
             if (!rendererRegistered) {
                 rendererRegistered = true;
-                // 用 Trigger.draw 代替 RenderEvent（每帧渲染时触发，兼容所有版本）
-                Events.on(Trigger.draw, e -> {
+                // v8 正确写法：Events.on(Class<T>, Cons<T>)
+                Events.on(RenderEvent.class, event -> {
                     Draw.reset();
                     float time = Time.time;
                     for (Shockwave wave : allWavesGlobal) {
@@ -467,7 +467,6 @@ public class PulsarModMain extends Mod {
 
         @Override
         public void draw(Unit unit) {
-            // 只画本体核心
             Draw.reset();
             float x = unit.x, y = unit.y, time = Time.time;
             Draw.z(110f);
