@@ -10,7 +10,7 @@ import arc.math.Mathf;
 import arc.struct.Seq;
 import arc.util.Log;
 import arc.util.Time;
-import mindustry.Vars;          // ← 新增：用 Vars.world 访问世界
+import mindustry.Vars;
 import mindustry.gen.Building;
 import mindustry.gen.Groups;
 import mindustry.gen.Unit;
@@ -309,7 +309,7 @@ public class PulsarModMain extends Mod {
     }
 
     // ============================================================
-    // 冲击波星（修复 Core.world → Vars.world）
+    // 冲击波星（干净版：无力量场，墙+建筑+单位）
     // ============================================================
     public static class ShockwaveUnitType extends UnitType {
         private final Color ringColor = Color.valueOf("00e5ff");
@@ -318,7 +318,6 @@ public class PulsarModMain extends Mod {
         private final float particleSpeed = 200f;
         private final float particleMaxDistance = 1800f;
         private final float wallDamage = 500f;
-        private final float forceWallDamage = 100f;
         private final int particlesPerWave = 750;
         private final int raySteps = 6;
 
@@ -345,7 +344,7 @@ public class PulsarModMain extends Mod {
             health = Integer.MAX_VALUE; speed = 0f; rotateSpeed = 8f;
             hitSize = baseRadius * 2f; constructor = UnitEntity::create;
             weapons = new Seq<>(); outlineColor = Color.valueOf("00000000");
-            localizedName = "冲击波星";
+            localizedName = "不稳定星体";
         }
 
         @Override
@@ -359,7 +358,6 @@ public class PulsarModMain extends Mod {
                     float angle = i * (360f / particlesPerWave) + Mathf.random(360f);
                     particles.add(new ShockwaveParticle(unit.x, unit.y, angle));
                 }
-                if (DEBUG) Log.info("[PulsarMod] 发射冲击波粒子！当前粒子数: " + particles.size);
             }
 
             for (ShockwaveParticle p : particles) {
@@ -368,6 +366,7 @@ public class PulsarModMain extends Mod {
                 float moveAmount = particleSpeed * (Time.delta / 60f);
                 float stepLen = moveAmount / raySteps;
 
+                // Ray march：检测墙/建筑
                 for (int s = 0; s < raySteps; s++) {
                     p.x += Angles.trnsx(p.angle, stepLen);
                     p.y += Angles.trnsy(p.angle, stepLen);
@@ -375,13 +374,6 @@ public class PulsarModMain extends Mod {
 
                     if (p.dead) break;
 
-                    // 力场检测（优先）
-                    if (checkForceWall(unit, p)) {
-                        p.dead = true;
-                        break;
-                    }
-
-                    // 建筑/墙检测 —— 关键修复：Core.world → Vars.world
                     Tile tile = Vars.world.tileWorld(p.x, p.y);
                     if (tile != null && tile.build != null) {
                         Building b = tile.build;
@@ -444,57 +436,6 @@ public class PulsarModMain extends Mod {
                     b.damage(wallDamage);
                     p.dead = true;
                 }
-            }
-        }
-
-        // ===== 力场检测 =====
-        private boolean checkForceWall(Unit unit, ShockwaveParticle p) {
-            for (Building b : Groups.build) {
-                if (b == null || !b.isValid()) continue;
-                if (b.team == unit.team) continue;
-                if (!isForceProjector(b)) continue;
-
-                float radius = getForceRadius(b);
-                if (Mathf.dst(p.x, p.y, b.x, b.y) <= radius) {
-                    damageForceProjector(b, forceWallDamage);
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        // ===== 力场伤害分配：护盾90 + 本体10 =====
-        private void damageForceProjector(Building b, float totalDamage) {
-            float hullDamage = 10f;
-            float shieldDamage = totalDamage - hullDamage;
-
-            try {
-                Field shieldField = b.getClass().getDeclaredField("shield");
-                shieldField.setAccessible(true);
-                float currentShield = shieldField.getFloat(b);
-                float newShield = currentShield - shieldDamage;
-                shieldField.setFloat(b, Math.max(0f, newShield));
-                if (DEBUG) Log.info("[PulsarMod] 力墙护盾: " + currentShield + " -> " + Math.max(0f, newShield));
-            } catch (Exception e) {
-                hullDamage = totalDamage; // 反射失败，伤害全转本体
-            }
-
-            b.damage(hullDamage);
-        }
-
-        private boolean isForceProjector(Building b) {
-            if (b == null || b.block == null) return false;
-            String name = b.block.name != null ? b.block.name : "";
-            return name.contains("force") || name.contains("projector");
-        }
-
-        private float getForceRadius(Building b) {
-            try {
-                Field f = b.block.getClass().getDeclaredField("forceRadius");
-                f.setAccessible(true);
-                return ((Number) f.get(b.block)).floatValue();
-            } catch (Exception e) {
-                return 120f;
             }
         }
 
