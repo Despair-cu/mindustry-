@@ -169,7 +169,7 @@ public class PulsarModMain extends Mod {
             Mathf.rand.setSeed(0);
         }
 
-        private float distanceToSegment(float px, float py, float x1, float y1, float x2, float y2) {
+        private static float distanceToSegment(float px, float py, float x1, float y1, float x2, float y2) {
             float dx = x2 - x1, dy = y2 - y1; float len2 = dx * dx + dy * dy;
             if (len2 < 0.0001f) return Mathf.dst(px, py, x1, y1);
             float t = ((px - x1) * dx + (py - y1) * dy) / len2; t = Mathf.clamp(t, 0f, 1f);
@@ -287,7 +287,7 @@ public class PulsarModMain extends Mod {
             Mathf.rand.setSeed(0);
         }
 
-        private float distanceToSegment(float px, float py, float x1, float y1, float x2, float y2) {
+        private static float distanceToSegment(float px, float py, float x1, float y1, float x2, float y2) {
             float dx = x2 - x1, dy = y2 - y1; float len2 = dx * dx + dy * dy;
             if (len2 < 0.0001f) return Mathf.dst(px, py, x1, y1);
             float t = ((px - x1) * dx + (py - y1) * dy) / len2; t = Mathf.clamp(t, 0f, 1f);
@@ -296,28 +296,32 @@ public class PulsarModMain extends Mod {
     }
 
     // ============================================================
-    // 不稳定引力波（简洁版：draw()内绘制，不折腾全局渲染）
+    // 不稳定引力波（粒子版：单位秒杀继续飞，建筑看血量）
     // ============================================================
     public static class ShockwaveUnitType extends UnitType {
         private final Color ringColor = Color.valueOf("00e5ff");
         private final float baseRadius = 22f;
         private final float shockwaveInterval = 5f * 60f;
-        private final float shockwaveSpeed = 400f;
-        private final float shockwaveThickness = 20f;
-        private final float shockwaveMaxRadius = 1800f;
+        private final float particleSpeed = 400f;
+        private final float particleMaxDistance = 1800f;
         private final float wallDamage = 1000f;
+        private final int particlesPerWave = 36; // 每10度一个粒子
 
         private float shockwaveTimer = 0f;
-        private final Seq<Shockwave> activeWaves = new Seq<>();
+        private final Seq<ShockwaveParticle> particles = new Seq<>();
 
-        private static class Shockwave {
-            float radius;
-            Seq<Unit> hitUnits = new Seq<>();
-            Seq<Building> hitBuildings = new Seq<>();
-            Seq<Building> blockedByBuildings = new Seq<>();
+        private static class ShockwaveParticle {
+            float x, y;
+            float angle;
+            float distTraveled;
+            boolean dead;
 
-            Shockwave(float startRadius) {
-                this.radius = startRadius;
+            ShockwaveParticle(float x, float y, float angle) {
+                this.x = x;
+                this.y = y;
+                this.angle = angle;
+                this.distTraveled = 0f;
+                this.dead = false;
             }
         }
 
@@ -334,93 +338,61 @@ public class PulsarModMain extends Mod {
             unit.health = health;
             shockwaveTimer += Time.delta;
 
+            // 每5秒发射一圈粒子
             if (shockwaveTimer >= shockwaveInterval) {
                 shockwaveTimer = 0f;
-                Shockwave wave = new Shockwave(unit.hitSize);
-                activeWaves.add(wave);
+                for (int i = 0; i < particlesPerWave; i++) {
+                    float angle = i * (360f / particlesPerWave);
+                    particles.add(new ShockwaveParticle(unit.x, unit.y, angle));
+                }
+                if (DEBUG) Log.info("[PulsarMod] 发射冲击波粒子！当前粒子数: " + particles.size);
+            }
 
-                float sx = unit.x, sy = unit.y;
+            // 更新所有粒子
+            for (ShockwaveParticle p : particles) {
+                if (p.dead) continue;
 
+                float moveAmount = particleSpeed * (Time.delta / 60f);
+                p.distTraveled += moveAmount;
+                p.x += Angles.trnsx(p.angle, moveAmount);
+                p.y += Angles.trnsy(p.angle, moveAmount);
+
+                // --- 碰撞检测：单位 ---
                 for (Unit u : Groups.unit) {
                     if (u == null || u.dead || u.team == unit.team) continue;
                     if (u.type instanceof YellowDwarfUnitType || u.type instanceof BluePulsarUnitType ||
                         u.type instanceof BlackHoleUnitType || u.type instanceof ShockwaveUnitType) continue;
-                    float dst = Mathf.dst(sx, sy, u.x, u.y);
-                    if (dst <= shockwaveMaxRadius && !isBlockedByBuilding(sx, sy, u.x, u.y, wave)) {
-                        wave.hitUnits.add(u);
+
+                    float hitDst = u.hitSize + 3f;
+                    if (Mathf.dst(p.x, p.y, u.x, u.y) <= hitDst) {
+                        u.kill(); // 秒杀！粒子不消失，继续飞
                     }
                 }
 
+                // --- 碰撞检测：建筑 ---
                 for (Building b : Groups.build) {
                     if (b == null || !b.isValid() || b.team == unit.team) continue;
-                    float dst = Mathf.dst(sx, sy, b.x, b.y);
-                    if (dst <= shockwaveMaxRadius && !isBlockedByBuilding(sx, sy, b.x, b.y, wave)) {
-                        wave.hitBuildings.add(b);
+
+                    float blockRadius = b.block.size * 4f;
+                    if (Mathf.dst(p.x, p.y, b.x, b.y) <= blockRadius + 3f) {
+                        if (b.health <= wallDamage) {
+                            b.kill(); // 血量不足1000，摧毁，粒子继续飞
+                        } else {
+                            b.damage(wallDamage); // 扣1000血
+                            p.dead = true; // 粒子消失
+                            break; // 粒子死了，跳出建筑检测
+                        }
                     }
                 }
 
-                if (DEBUG) Log.info("[PulsarMod] 新冲击波生成！当前活跃波数: " + activeWaves.size);
-            }
-
-            // 更新所有活跃的波
-            activeWaves.removeAll(wave -> {
-                float prevRadius = wave.radius;
-                wave.radius += shockwaveSpeed * (Time.delta / 60f);
-
-                // 单位：秒杀
-                wave.hitUnits.removeAll(u -> {
-                    if (u == null || u.dead) return true;
-                    float dst = Mathf.dst(unit.x, unit.y, u.x, u.y);
-                    if (dst >= prevRadius && dst <= wave.radius + shockwaveThickness) {
-                        if (!isBlockedByBuilding(unit.x, unit.y, u.x, u.y, wave)) {
-                            u.kill();
-                        }
-                        return true;
-                    }
-                    return false;
-                });
-
-                // 建筑：1000伤害
-                wave.hitBuildings.removeAll(b -> {
-                    if (b == null || !b.isValid()) return true;
-                    float dst = Mathf.dst(unit.x, unit.y, b.x, b.y);
-                    if (dst >= prevRadius && dst <= wave.radius + shockwaveThickness) {
-                        if (!isBlockedByBuilding(unit.x, unit.y, b.x, b.y, wave)) {
-                            b.damage(wallDamage);
-                        }
-                        return true;
-                    }
-                    return false;
-                });
-
-                return wave.radius > shockwaveMaxRadius;
-            });
-        }
-
-        private boolean isBlockedByBuilding(float sx, float sy, float tx, float ty, Shockwave wave) {
-            float distSourceToTarget = Mathf.dst(sx, sy, tx, ty);
-
-            wave.blockedByBuildings.removeAll(b -> b == null || !b.isValid());
-
-            for (Building b : Groups.build) {
-                if (b == null || !b.isValid()) continue;
-                if (wave.blockedByBuildings.contains(b)) return true;
-                if (Mathf.dst(b.x, b.y, tx, ty) < 4f) continue;
-
-                float blockRadius = b.block.size * 4f;
-                float distToTarget = Mathf.dst(b.x, b.y, tx, ty);
-
-                if (distToTarget <= blockRadius) {
-                    float distToSource = Mathf.dst(sx, sy, b.x, b.y);
-                    if (distToSource < distSourceToTarget) {
-                        b.damage(wallDamage);
-                        wave.blockedByBuildings.add(b);
-                        if (DEBUG) Log.info("[PulsarMod] " + b.block.name + " 挡下了冲击波！");
-                        return true;
-                    }
+                // 超出最大距离消失
+                if (p.distTraveled > particleMaxDistance) {
+                    p.dead = true;
                 }
             }
-            return false;
+
+            // 清理死亡粒子
+            particles.removeAll(p -> p.dead);
         }
 
         @Override
@@ -428,24 +400,13 @@ public class PulsarModMain extends Mod {
             Draw.reset();
             float x = unit.x, y = unit.y, time = Time.time;
 
-            // 绘制所有活跃的波圈（和本体一起画，简单粗暴）
-            for (Shockwave wave : activeWaves) {
-                if (wave == null) continue;
+            // 绘制所有粒子
+            for (ShockwaveParticle p : particles) {
                 Draw.z(130f);
-                float alpha = 0.5f * (1f - wave.radius / shockwaveMaxRadius);
-                Draw.color(ringColor, alpha * 2f);
-                Lines.stroke(shockwaveThickness);
-                Lines.circle(x, y, wave.radius);
-                Draw.color(Color.white, alpha * 1.5f);
-                Lines.stroke(3f + Mathf.sin(time * 10f) * 2f);
-                Lines.circle(x, y, wave.radius);
-                for (int i = 0; i < 48; i++) {
-                    float a = time * 3f + i * 7.5f;
-                    float px = x + Angles.trnsx(a, wave.radius);
-                    float py = y + Angles.trnsy(a, wave.radius);
-                    Draw.color(ringColor, alpha * 2f);
-                    Fill.circle(px, py, 3f + Mathf.sin(time * 5f + i) * 2f);
-                }
+                Draw.color(ringColor);
+                Fill.circle(p.x, p.y, 3f + Mathf.sin(time * 5f) * 1.5f);
+                Draw.color(Color.white, 0.8f);
+                Fill.circle(p.x, p.y, 1.5f);
             }
 
             // 绘制本体核心
