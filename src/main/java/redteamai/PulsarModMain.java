@@ -22,15 +22,17 @@ public class PulsarModMain extends Mod {
 
     public static boolean DEBUG = false;
 
-    @Override
-    public void loadContent() {
-        Log.info("[PulsarMod] 加载恒星单位...");
-        new YellowDwarfUnitType("yellow-dwarf").load();
-        new BluePulsarUnitType("blue-pulsar").load();
-        new BlackHoleUnitType("black-hole").load();
-        new UnstableGravityWaveUnitType("unstable-gravity-wave").load();
-        Log.info("[PulsarMod] 所有单位注册完成");
-    }
+@Override
+public void loadContent() {
+    Log.info("[PulsarMod] 加载恒星单位...");
+    new YellowDwarfUnitType("yellow-dwarf").load();
+    new BluePulsarUnitType("blue-pulsar").load();
+    new BlackHoleUnitType("black-hole").load();
+    new UnstableGravityWaveUnitType("unstable-gravity-wave").load();
+    new DaoXuUnitType("daoxu-dreadnought").load();
+    Log.info("[PulsarMod] 所有单位注册完成");
+}
+
 
     public static class YellowDwarfUnitType extends UnitType {
         private final Color coreColor = Color.valueOf("ffd37f");
@@ -506,5 +508,95 @@ public class PulsarModMain extends Mod {
             float t = ((px - x1) * dx + (py - y1) * dy) / len2; t = Mathf.clamp(t, 0f, 1f);
             return Mathf.dst(px, py, x1 + t * dx, y1 + t * dy);
         }
+
+    // ==================== 道虚-无畏舰 ====================
+
+    public static class DaoXuUnitEntity extends UnitEntity {
+        public boolean charging = false;
+        public int chargeTicks = 0;
+        public float blinkCooldown = 0f;
+        public boolean blinkReady = true;
+    }
+
+    public static class DaoXuUnitType extends UnitType {
+        private static final float BLINK_RANGE = 5500f;
+        private static final float BLINK_COOLDOWN = 600f;
+        private static final int CHARGE_NEEDED = 23;
+
+        public DaoXuUnitType(String name) {
+            super(name);
+            health = 200000;
+            speed = 0.65f;
+            hitSize = 300f;
+            constructor = DaoXuUnitEntity::create;
+            weapons = new Seq<>();
+            outlineColor = Color.valueOf("00000000");
+            region = Core.atlas.find("daoxu");
+            localizedName = "道虚-无畏舰";
+            setupWeapons();
+        }
+
+        private void setupWeapons() {
+            Weapon w1 = new Weapon();
+            w1.x = 0f; w1.y = 0f;
+            w1.reload = 30f;
+            w1.bullet = new BulletType(10f, 50f);
+            weapons.add(w1);
+        }
+
+        @Override
+        public void update(Unit unit) {
+            if (!(unit instanceof DaoXuUnitEntity)) return;
+            DaoXuUnitEntity e = (DaoXuUnitEntity) unit;
+            unit.health = health;
+
+            if (e.blinkCooldown > 0f) {
+                e.blinkCooldown -= Time.delta;
+                if (e.blinkCooldown <= 0f) {
+                    e.blinkCooldown = 0f;
+                    e.blinkReady = true;
+                }
+            }
+
+            if (e.charging) {
+                e.chargeTicks++;
+                if (e.chargeTicks >= CHARGE_NEEDED) {
+                    Unit target = Units.closestTarget(unit.team, unit.x, unit.y, 2000f);
+                    if (target != null) {
+                        fireSGEL(e, target.x, target.y);
+                    }
+                    e.charging = false;
+                    e.chargeTicks = 0;
+                }
+            }
+        }
+
+        private void fireSGEL(DaoXuUnitEntity e, float tx, float ty) {
+            float ang = Angles.angle(e.x, e.y, tx, ty);
+            Lightning.create(e.team, Color.valueOf("00e5ff"), 50000f, e.x, e.y, ang, 5);
+            DaoXuEffects.sgeljz.at(e.x, e.y, ang);
+            for (Unit u : Units.nearby(e.team, tx, ty, 300f)) {
+                if (u.team() != e.team) u.damage(50000f);
+            }
+        }
+
+        public void triggerBlink(DaoXuUnitEntity e, float tx, float ty) {
+            if (!e.blinkReady) return;
+            e.blinkReady = false;
+            e.blinkCooldown = BLINK_COOLDOWN;
+            float ang = Angles.angle(e.x, e.y, tx, ty);
+            float dist = Mathf.dst(e.x, e.y, tx, ty);
+            if (dist > BLINK_RANGE) dist = BLINK_RANGE;
+            e.setX(e.x + Angles.trnsx(ang, dist));
+            e.setY(e.y + Angles.trnsy(ang, dist));
+        }
+    }
+
+    public static class DaoXuEffects {
+        public static final Effect sgeljz = new Effect(40f, e -> {
+            Draw.color(Color.valueOf("00e5ff"), Color.white, e.fin());
+            Lines.stroke(4f * e.fout());
+            Lines.circle(e.x, e.y, e.fin() * 100f);
+        });
     }
 }
