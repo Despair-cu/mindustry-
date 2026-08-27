@@ -22,17 +22,16 @@ public class PulsarModMain extends Mod {
 
     public static boolean DEBUG = false;
 
-@Override
-public void loadContent() {
-    Log.info("[PulsarMod] 加载恒星单位...");
-    new YellowDwarfUnitType("yellow-dwarf").load();
-    new BluePulsarUnitType("blue-pulsar").load();
-    new BlackHoleUnitType("black-hole").load();
-    new UnstableGravityWaveUnitType("unstable-gravity-wave").load();
-    new DaoXuUnitType("daoxu-dreadnought").load();
-    Log.info("[PulsarMod] 所有单位注册完成");
-}
-
+    @Override
+    public void loadContent() {
+        Log.info("[PulsarMod] 加载恒星单位...");
+        new YellowDwarfUnitType("yellow-dwarf").load();
+        new BluePulsarUnitType("blue-pulsar").load();
+        new BlackHoleUnitType("black-hole").load();
+        new UnstableGravityWaveUnitType("unstable-gravity-wave").load();
+        new DaoXuUnitType("daoxu-dreadnought").load();
+        Log.info("[PulsarMod] 所有单位注册完成");
+    }
 
     public static class YellowDwarfUnitType extends UnitType {
         private final Color coreColor = Color.valueOf("ffd37f");
@@ -508,6 +507,7 @@ public void loadContent() {
             float t = ((px - x1) * dx + (py - y1) * dy) / len2; t = Mathf.clamp(t, 0f, 1f);
             return Mathf.dst(px, py, x1 + t * dx, y1 + t * dy);
         }
+    }
 
     // ==================== 道虚-无畏舰 ====================
 
@@ -537,11 +537,10 @@ public void loadContent() {
         }
 
         private void setupWeapons() {
-            Weapon w1 = new Weapon();
-            w1.x = 0f; w1.y = 0f;
-            w1.reload = 30f;
-            w1.bullet = new BulletType(10f, 50f);
-            weapons.add(w1);
+            Weapon w = new Weapon();
+            w.reload = 30f;
+            w.bullet = new BulletType(10f, 50f);
+            weapons.add(w);
         }
 
         @Override
