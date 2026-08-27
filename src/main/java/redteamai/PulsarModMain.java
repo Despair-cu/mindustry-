@@ -16,6 +16,9 @@ import mindustry.gen.Unit;
 import mindustry.gen.UnitEntity;
 import mindustry.mod.Mod;
 import mindustry.type.UnitType;
+import mindustry.world.Tile;
+
+import java.lang.reflect.Field;
 
 public class PulsarModMain extends Mod {
 
@@ -31,6 +34,9 @@ public class PulsarModMain extends Mod {
         Log.info("[PulsarMod] 所有单位注册完成");
     }
 
+    // ============================================================
+    // 黄矮星
+    // ============================================================
     public static class YellowDwarfUnitType extends UnitType {
         private final Color coreColor = Color.valueOf("ffd37f");
         private final Color outerColor = Color.valueOf("ff9d00");
@@ -39,9 +45,13 @@ public class PulsarModMain extends Mod {
 
         public YellowDwarfUnitType(String name) {
             super(name);
-            health = Integer.MAX_VALUE; speed = 0f; rotateSpeed = 8f;
-            hitSize = baseRadius * 2f; constructor = UnitEntity::create;
-            weapons = new Seq<>(); outlineColor = Color.valueOf("00000000");
+            health = Integer.MAX_VALUE;
+            speed = 0f;
+            rotateSpeed = 8f;
+            hitSize = baseRadius * 2f;
+            constructor = UnitEntity::create;
+            weapons = new Seq<>();
+            outlineColor = Color.valueOf("00000000");
             localizedName = "黄矮星";
         }
 
@@ -57,7 +67,9 @@ public class PulsarModMain extends Mod {
                     u.y -= Angles.trnsy(angle, gravityStrength);
                     u.damage(suckDamage * Time.delta);
                 }
-                if (dst <= unit.hitSize + u.hitSize + 5f) { u.kill(); }
+                if (dst <= unit.hitSize + u.hitSize + 5f) {
+                    u.kill();
+                }
             }
         }
 
@@ -74,18 +86,24 @@ public class PulsarModMain extends Mod {
             Lines.circle(x, y, wave * baseRadius * 3.5f);
             Draw.color(outerColor, 0.25f + pulse * 0.1f);
             Fill.circle(x, y, radius * 1.6f);
-            Draw.color(coreColor); Fill.circle(x, y, radius * 0.7f);
-            Draw.color(Color.white, 0.8f); Fill.circle(x, y, radius * 0.35f);
+            Draw.color(coreColor);
+            Fill.circle(x, y, radius * 0.7f);
+            Draw.color(Color.white, 0.8f);
+            Fill.circle(x, y, radius * 0.35f);
             for (int i = 0; i < 3; i++) {
                 float a = time * (25f + i * 10f) + i * 120f;
                 float d = radius * 0.5f;
                 Draw.color(Color.white, coreColor, 0.5f + Mathf.sin(time + i * 60f, 10f, 0.5f));
                 Fill.circle(x + Angles.trnsx(a, d), y + Angles.trnsy(a, d), 2.5f + pulse * 1.2f);
             }
-            Draw.reset(); Draw.z(0f);
+            Draw.reset();
+            Draw.z(0f);
         }
     }
 
+    // ============================================================
+    // 中子星（蓝脉冲星）
+    // ============================================================
     public static class BluePulsarUnitType extends UnitType {
         private final Color coreColor = Color.valueOf("00e5ff");
         private final Color outerColor = Color.valueOf("0099cc");
@@ -97,10 +115,16 @@ public class PulsarModMain extends Mod {
 
         public BluePulsarUnitType(String name) {
             super(name);
-            health = Integer.MAX_VALUE; speed = 0f; rotateSpeed = 12f;
-            hitSize = baseRadius * 2f; constructor = UnitEntity::create;
-            weapons = new Seq<>(); outlineColor = Color.valueOf("00000000");
-            region = Core.atlas.find("clear"); drawBody = false; drawCell = false;
+            health = Integer.MAX_VALUE;
+            speed = 0f;
+            rotateSpeed = 12f;
+            hitSize = baseRadius * 2f;
+            constructor = UnitEntity::create;
+            weapons = new Seq<>();
+            outlineColor = Color.valueOf("00000000");
+            region = Core.atlas.find("clear");
+            drawBody = false;
+            drawCell = false;
             localizedName = "中子星";
         }
 
@@ -127,7 +151,9 @@ public class PulsarModMain extends Mod {
                     u.x -= Angles.trnsx(angle, gravityStrength);
                     u.y -= Angles.trnsy(angle, gravityStrength);
                 }
-                if (dst <= unit.hitSize + u.hitSize + 5f) { u.kill(); }
+                if (dst <= unit.hitSize + u.hitSize + 5f) {
+                    u.kill();
+                }
             }
         }
 
@@ -140,13 +166,16 @@ public class PulsarModMain extends Mod {
             drawNeutronJet(x, y, 0f + swing, time, unit.id);
             drawNeutronJet(x, y, 180f + swing, time, unit.id + 1000);
             Draw.z(110f);
-            Draw.color(coreColor); Fill.circle(x, y, baseRadius * 1.5f);
+            Draw.color(coreColor);
+            Fill.circle(x, y, baseRadius * 1.5f);
             Fill.circle(x, y, baseRadius * 0.5f);
-            Draw.reset(); Draw.z(0f);
+            Draw.reset();
+            Draw.z(0f);
         }
 
         private void drawNeutronJet(float x, float y, float angle, float time, long seed) {
-            float spacing = 3.0f; float travel = time * particleSpeed;
+            float spacing = 3.0f;
+            float travel = time * particleSpeed;
             Mathf.rand.setSeed(seed);
             for (int i = 0; i < particleCount; i++) {
                 float dist = (travel + i * spacing) % jetLength;
@@ -164,19 +193,25 @@ public class PulsarModMain extends Mod {
                 float alpha = (1f - t * 0.8f) * (0.5f + flicker * 0.5f);
                 float size = (1.0f - t * 0.6f) * Mathf.rand.random(0.7f, 1.2f);
                 size = Math.max(size, 0.15f);
-                Draw.color(c, alpha); Fill.circle(px, py, size);
+                Draw.color(c, alpha);
+                Fill.circle(px, py, size);
             }
             Mathf.rand.setSeed(0);
         }
 
         private static float distanceToSegment(float px, float py, float x1, float y1, float x2, float y2) {
-            float dx = x2 - x1, dy = y2 - y1; float len2 = dx * dx + dy * dy;
+            float dx = x2 - x1, dy = y2 - y1;
+            float len2 = dx * dx + dy * dy;
             if (len2 < 0.0001f) return Mathf.dst(px, py, x1, y1);
-            float t = ((px - x1) * dx + (py - y1) * dy) / len2; t = Mathf.clamp(t, 0f, 1f);
+            float t = ((px - x1) * dx + (py - y1) * dy) / len2;
+            t = Mathf.clamp(t, 0f, 1f);
             return Mathf.dst(px, py, x1 + t * dx, y1 + t * dy);
         }
     }
 
+    // ============================================================
+    // 黑洞
+    // ============================================================
     public static class BlackHoleUnitType extends UnitType {
         private final float baseRadius = 6f;
         private final float gravityRange = 350f, gravityStrength = 5.0f;
@@ -193,9 +228,13 @@ public class PulsarModMain extends Mod {
 
         public BlackHoleUnitType(String name) {
             super(name);
-            health = Integer.MAX_VALUE; speed = 0f; rotateSpeed = 0f;
-            hitSize = baseRadius * 2f; constructor = UnitEntity::create;
-            weapons = new Seq<>(); outlineColor = Color.valueOf("00000000");
+            health = Integer.MAX_VALUE;
+            speed = 0f;
+            rotateSpeed = 0f;
+            hitSize = baseRadius * 2f;
+            constructor = UnitEntity::create;
+            weapons = new Seq<>();
+            outlineColor = Color.valueOf("00000000");
             localizedName = "黑洞";
         }
 
@@ -222,7 +261,9 @@ public class PulsarModMain extends Mod {
                     u.x -= Angles.trnsx(angle, gravityStrength);
                     u.y -= Angles.trnsy(angle, gravityStrength);
                 }
-                if (dst <= unit.hitSize + u.hitSize + 5f) { u.remove(); }
+                if (dst <= unit.hitSize + u.hitSize + 5f) {
+                    u.remove();
+                }
             }
         }
 
@@ -236,13 +277,17 @@ public class PulsarModMain extends Mod {
             Draw.z(95f);
             drawAccretionDisk(x, y, time);
             Draw.z(110f);
-            Draw.color(coreColor); Fill.circle(x, y, baseRadius * 1.3f);
-            Draw.color(Color.valueOf("888888"), 0.5f); Fill.circle(x, y, baseRadius * 0.4f);
-            Draw.reset(); Draw.z(0f);
+            Draw.color(coreColor);
+            Fill.circle(x, y, baseRadius * 1.3f);
+            Draw.color(Color.valueOf("888888"), 0.5f);
+            Fill.circle(x, y, baseRadius * 0.4f);
+            Draw.reset();
+            Draw.z(0f);
         }
 
         private void drawBlackHoleJets(float x, float y, float swing, float time) {
-            float spacing = 1.0f; float travel = time * jetParticleSpeed;
+            float spacing = 1.0f;
+            float travel = time * jetParticleSpeed;
             Mathf.rand.setSeed(0);
             for (int sign : new int[]{1, -1}) {
                 float angle = 90f * sign + swing;
@@ -262,7 +307,8 @@ public class PulsarModMain extends Mod {
                     float alpha = (1f - t * 0.75f) * (0.6f + flicker * 0.4f);
                     float size = (1.5f - t * 1.0f) * Mathf.rand.random(0.8f, 1.5f);
                     size = Math.max(size, 0.25f);
-                    Draw.color(c, alpha); Fill.circle(px, py, size);
+                    Draw.color(c, alpha);
+                    Fill.circle(px, py, size);
                 }
             }
             Mathf.rand.setSeed(0);
@@ -282,44 +328,54 @@ public class PulsarModMain extends Mod {
                 float alpha = (0.7f + flicker * 0.3f) * (1f - t * 0.6f);
                 float size = (2.0f - t * 1.3f) + Mathf.sin(time * 6f + i) * 0.3f;
                 size = Math.max(size, 0.3f);
-                Draw.color(c, alpha); Fill.circle(px, py, size);
+                Draw.color(c, alpha);
+                Fill.circle(px, py, size);
             }
             Mathf.rand.setSeed(0);
         }
 
         private static float distanceToSegment(float px, float py, float x1, float y1, float x2, float y2) {
-            float dx = x2 - x1, dy = y2 - y1; float len2 = dx * dx + dy * dy;
+            float dx = x2 - x1, dy = y2 - y1;
+            float len2 = dx * dx + dy * dy;
             if (len2 < 0.0001f) return Mathf.dst(px, py, x1, y1);
-            float t = ((px - x1) * dx + (py - y1) * dy) / len2; t = Mathf.clamp(t, 0f, 1f);
+            float t = ((px - x1) * dx + (py - y1) * dy) / len2;
+            t = Mathf.clamp(t, 0f, 1f);
             return Mathf.dst(px, py, x1 + t * dx, y1 + t * dy);
         }
     }
 
     // ============================================================
-    // 不稳定引力波（粒子版：750粒子，速度200，矩形碰撞）
+    // 冲击波星（完整修复版）
+    // - 墙：反射强制扣 health（绕过 damage() 免疫）
+    // - 建筑：500 伤害
+    // - 力场：总100伤害 → 护盾90 + 本体10，粒子消失
+    // - 单位：秒杀，粒子继续飞
+    // - ray march 6步采样，薄墙必中
     // ============================================================
     public static class ShockwaveUnitType extends UnitType {
         private final Color ringColor = Color.valueOf("00e5ff");
         private final float baseRadius = 22f;
         private final float shockwaveInterval = 5f * 60f;
-        private final float particleSpeed = 200f;       // 之前400，现在200
+        private final float particleSpeed = 200f;
         private final float particleMaxDistance = 1800f;
-        private final float wallDamage = 1000f;
-        private final int particlesPerWave = 750;       // 之前500，现在750
+        private final float wallDamage = 500f;
+        private final float forceWallDamage = 100f;
+        private final int particlesPerWave = 750;
+        private final int raySteps = 6;
 
         private float shockwaveTimer = 0f;
         private final Seq<ShockwaveParticle> particles = new Seq<>();
 
         private static class ShockwaveParticle {
             float x, y;
-            float prevX, prevY;
             float angle;
             float distTraveled;
             boolean dead;
+            Building lastHitBuilding = null;
 
             ShockwaveParticle(float x, float y, float angle) {
-                this.x = x; this.y = y;
-                this.prevX = x; this.prevY = y;
+                this.x = x;
+                this.y = y;
                 this.angle = angle;
                 this.distTraveled = 0f;
                 this.dead = false;
@@ -328,9 +384,13 @@ public class PulsarModMain extends Mod {
 
         public ShockwaveUnitType(String name) {
             super(name);
-            health = Integer.MAX_VALUE; speed = 0f; rotateSpeed = 8f;
-            hitSize = baseRadius * 2f; constructor = UnitEntity::create;
-            weapons = new Seq<>(); outlineColor = Color.valueOf("00000000");
+            health = Integer.MAX_VALUE;
+            speed = 0f;
+            rotateSpeed = 8f;
+            hitSize = baseRadius * 2f;
+            constructor = UnitEntity::create;
+            weapons = new Seq<>();
+            outlineColor = Color.valueOf("00000000");
             localizedName = "冲击波星";
         }
 
@@ -339,6 +399,7 @@ public class PulsarModMain extends Mod {
             unit.health = health;
             shockwaveTimer += Time.delta;
 
+            // 每5秒发射一波
             if (shockwaveTimer >= shockwaveInterval) {
                 shockwaveTimer = 0f;
                 for (int i = 0; i < particlesPerWave; i++) {
@@ -352,38 +413,47 @@ public class PulsarModMain extends Mod {
                 if (p.dead) continue;
 
                 float moveAmount = particleSpeed * (Time.delta / 60f);
-                p.prevX = p.x;
-                p.prevY = p.y;
-                p.distTraveled += moveAmount;
-                p.x += Angles.trnsx(p.angle, moveAmount);
-                p.y += Angles.trnsy(p.angle, moveAmount);
+                float stepLen = moveAmount / raySteps;
 
-                // --- 单位：秒杀，粒子继续飞 ---
-                for (Unit u : Groups.unit) {
-                    if (u == null || u.dead || u.team == unit.team) continue;
-                    if (u.type instanceof YellowDwarfUnitType || u.type instanceof BluePulsarUnitType ||
-                        u.type instanceof BlackHoleUnitType || u.type instanceof ShockwaveUnitType) continue;
-                    if (Mathf.dst(p.x, p.y, u.x, u.y) <= u.hitSize + 3f) {
-                        u.kill();
+                // Ray march 分步采样
+                for (int s = 0; s < raySteps; s++) {
+                    p.x += Angles.trnsx(p.angle, stepLen);
+                    p.y += Angles.trnsy(p.angle, stepLen);
+                    p.distTraveled += stepLen;
+
+                    if (p.dead) break;
+
+                    // 1) 力场检测（优先）
+                    if (checkForceWall(unit, p)) {
+                        p.dead = true;
+                        break;
                     }
-                }
 
-                // --- 建筑：矩形 bounds 检测 ---
-                for (Building b : Groups.build) {
-                    if (b == null || !b.isValid()) continue;
-                    if (b.team == unit.team) continue;
-
-                    if (segmentIntersectsRect(p.prevX, p.prevY, p.x, p.y, b)) {
-                        if (b.health <= wallDamage) {
-                            b.kill();
-                        } else {
-                            b.damage(wallDamage);
-                            p.dead = true;
-                            break;
+                    // 2) 建筑/墙检测（用 tile 精确获取）
+                    Tile tile = Core.world.tileWorld(p.x, p.y);
+                    if (tile != null && tile.build != null) {
+                        Building b = tile.build;
+                        if (b.isValid() && b.team != unit.team) {
+                            handleBuildingHit(b, p);
+                            if (p.dead) break;
                         }
                     }
                 }
 
+                // 3) 单位检测（秒杀，粒子继续飞）
+                if (!p.dead) {
+                    for (Unit u : Groups.unit) {
+                        if (u == null || u.dead || u.team == unit.team) continue;
+                        if (u.type instanceof YellowDwarfUnitType || u.type instanceof BluePulsarUnitType ||
+                                u.type instanceof BlackHoleUnitType || u.type instanceof ShockwaveUnitType)
+                            continue;
+                        if (Mathf.dst(p.x, p.y, u.x, u.y) <= u.hitSize + 3f) {
+                            u.kill();
+                        }
+                    }
+                }
+
+                // 4) 超出最大距离消失
                 if (p.distTraveled > particleMaxDistance) {
                     p.dead = true;
                 }
@@ -392,35 +462,96 @@ public class PulsarModMain extends Mod {
             particles.removeAll(p -> p.dead);
         }
 
-        private boolean segmentIntersectsRect(float px1, float py1, float px2, float py2, Building b) {
-            float half = b.block.size * 4f;
-            float rx = b.x - half, ry = b.y - half;
-            float rw = half * 2f, rh = half * 2f;
+        // ===== 建筑/墙伤害处理 =====
+        private void handleBuildingHit(Building b, ShockwaveParticle p) {
+            if (p.lastHitBuilding == b) return;
+            p.lastHitBuilding = b;
 
-            float cx = (px1 + px2) * 0.5f, cy = (py1 + py2) * 0.5f;
-            float expand = half + Mathf.dst(px1, py1, px2, py2) * 0.5f;
-            if (Mathf.dst(cx, cy, b.x, b.y) > expand + Math.max(half, half)) return false;
+            boolean isWall = b.block.name != null && b.block.name.toLowerCase().contains("wall");
 
-            return segmentIntersectsSegment(px1, py1, px2, py2, rx, ry, rx + rw, ry)
-                || segmentIntersectsSegment(px1, py1, px2, py2, rx, ry + rh, rx + rw, ry + rh)
-                || segmentIntersectsSegment(px1, py1, px2, py2, rx, ry, rx, ry + rh)
-                || segmentIntersectsSegment(px1, py1, px2, py2, rx + rw, ry, rx + rw, ry + rh)
-                || (px1 >= rx && px1 <= rx + rw && py1 >= ry && py1 <= ry + rh);
+            if (isWall) {
+                // 墙：反射直接扣 health（绕过 damage() 免疫）
+                try {
+                    Field healthField = Building.class.getDeclaredField("health");
+                    healthField.setAccessible(true);
+                    float currentHealth = healthField.getFloat(b);
+                    float newHealth = currentHealth - wallDamage;
+
+                    if (newHealth <= 0f) {
+                        b.kill();
+                    } else {
+                        healthField.setFloat(b, newHealth);
+                        p.dead = true; // 粒子消失
+                    }
+                } catch (Exception e) {
+                    b.kill();
+                    p.dead = true;
+                }
+            } else {
+                // 普通建筑：正常 damage()
+                if (b.health <= wallDamage) {
+                    b.kill();
+                } else {
+                    b.damage(wallDamage);
+                    p.dead = true;
+                }
+            }
         }
 
-        private boolean segmentIntersectsSegment(float x1, float y1, float x2, float y2,
-                                                  float x3, float y3, float x4, float y4) {
-            float d1 = cross(x2 - x1, y2 - y1, x3 - x1, y3 - y1);
-            float d2 = cross(x2 - x1, y2 - y1, x4 - x1, y4 - y1);
-            float d3 = cross(x4 - x3, y4 - y3, x1 - x3, y1 - y3);
-            float d4 = cross(x4 - x3, y4 - y3, x2 - x3, y2 - y3);
-            if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) &&
-                ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) return true;
+        // ===== 力场投影检测 =====
+        private boolean checkForceWall(Unit unit, ShockwaveParticle p) {
+            for (Building b : Groups.build) {
+                if (b == null || !b.isValid()) continue;
+                if (b.team == unit.team) continue;
+                if (!isForceProjector(b)) continue;
+
+                float radius = getForceRadius(b);
+                if (Mathf.dst(p.x, p.y, b.x, b.y) <= radius) {
+                    damageForceProjector(b, forceWallDamage);
+                    return true; // 粒子消失
+                }
+            }
             return false;
         }
 
-        private float cross(float ax, float ay, float bx, float by) {
-            return ax * by - ay * bx;
+        // ===== 力场伤害分配：护盾90 + 本体10 =====
+        private void damageForceProjector(Building b, float totalDamage) {
+            float hullDamage = 10f;
+            float shieldDamage = totalDamage - hullDamage;
+
+            // 扣护盾
+            try {
+                Field shieldField = b.getClass().getDeclaredField("shield");
+                shieldField.setAccessible(true);
+                float currentShield = shieldField.getFloat(b);
+                float newShield = currentShield - shieldDamage;
+                shieldField.setFloat(b, Math.max(0f, newShield));
+                if (DEBUG)
+                    Log.info("[PulsarMod] 力墙护盾: " + currentShield + " -> " + Math.max(0f, newShield));
+            } catch (Exception e) {
+                // 反射失败，伤害全转本体
+                hullDamage = totalDamage;
+                if (DEBUG) Log.err("[PulsarMod] 反射读取shield失败，伤害全扣本体");
+            }
+
+            // 扣本体
+            b.damage(hullDamage);
+        }
+
+        private boolean isForceProjector(Building b) {
+            if (b == null || b.block == null) return false;
+            String name = b.block.name != null ? b.block.name : "";
+            return name.contains("force") || name.contains("projector");
+        }
+
+        private float getForceRadius(Building b) {
+            try {
+                Field f = b.block.getClass().getDeclaredField("forceRadius");
+                f.setAccessible(true);
+                return ((Number) f.get(b.block)).floatValue();
+            } catch (Exception e) {
+                return 120f;
+            }
         }
 
         @Override
